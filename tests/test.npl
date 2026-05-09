@@ -1,0 +1,7 @@
+age = 17.5
+nom = nathan
+string = "Hello, NPL !"
+
+if age > 18 -> >> string
+    elif age = 17.5 -> >> "bac + permis ?"
+    else age < 17.5 -> >> "pas encore mageur"
