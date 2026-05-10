@@ -1,9 +1,10 @@
 nom = "nathan"
-age = 17
-vrai = true
-faux = false
+age = 18
 
 >> nom
->> age
->> vrai
->> faux
+
+if age > 18 -> >> "majeur"
+elif age == 18 -> >> "bg"
+else -> >> "mineur"
+
+repeat 5 -> >> "Ceci est une boucle minimaliste !"

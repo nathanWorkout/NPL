@@ -53,6 +53,10 @@ void Codegen::generate(ASTNode* node)
     gen_assign(n);
     else if(auto n = dynamic_cast<Output*>(node))
     gen_output(n);
+    else if(auto n = dynamic_cast<IfStmt*>(node))
+    gen_if(n);
+    else if(auto n = dynamic_cast<RepeatStmt*>(node))
+    gen_repeat(n);
 }
 
 void Codegen::gen_block(Block* node)
@@ -154,4 +158,64 @@ void Codegen::gen_output(Output* node)
 		text_ += "    syscall\n";
 		emit_newline();
 	}
+}
+
+void Codegen::gen_if(IfStmt* node)
+{
+    std::string end_lbl = "__ifend" + std::to_string(str_counter_++);
+
+    for(size_t i = 0; i < node->branches.size(); i++)
+    {
+        auto& [cond, body] = node->branches[i];
+        std::string next_lbl = "__ifnext" + std::to_string(str_counter_++);
+        auto binop = dynamic_cast<BinOp*>(cond.get());
+
+        if(auto id = dynamic_cast<Identifier*>(binop->lhs.get()))
+            text_ += "    mov rax, [" + id->name + "]\n";
+        else if(auto num = dynamic_cast<NumberLit*>(binop->lhs.get()))
+            text_ += "    mov rax, " + std::to_string((int)num->value) + "\n";
+
+        if(auto id = dynamic_cast<Identifier*>(binop->rhs.get()))
+            text_ += "    mov rbx, [" + id->name + "]\n";
+        else if(auto num = dynamic_cast<NumberLit*>(binop->rhs.get()))
+            text_ += "    mov rbx, " + std::to_string((int)num->value) + "\n";
+
+        text_ += "    cmp rax, rbx\n";
+        if(binop->op == ">") text_ += "    jle ." + next_lbl + "\n";
+        else if(binop->op == "<") text_ += "    jge ." + next_lbl + "\n";
+        else if(binop->op == "==") text_ += "    jne ." + next_lbl + "\n";
+        else if(binop->op == "!=") text_ += "    je ." + next_lbl + "\n";
+        else if(binop->op == ">=") text_ += "    jl ." + next_lbl + "\n";
+        else if(binop->op == "<=") text_ += "    jg ." + next_lbl + "\n";
+
+        generate(body.get());
+        text_ += "    jmp ." + end_lbl + "\n";
+        text_ += "." + next_lbl + ":\n";
+    }
+
+    if(node->else_body)
+        generate(node->else_body.get());
+
+    text_ += "." + end_lbl + ":\n";
+}
+
+void Codegen::gen_repeat(RepeatStmt* node)
+{
+    std::string lbl = "__repeat" + std::to_string(str_counter_++);
+
+    if(auto num = dynamic_cast<NumberLit*>(node->count.get()))
+    {
+        text_ += "    mov rcx, " + std::to_string((int)num->value) + "\n";
+    }
+    else if(auto id = dynamic_cast<Identifier*>(node->count.get()))
+    {
+        text_ += "    mov rcx, [" + id->name + "]\n";
+    }
+
+    text_ += "." + lbl + ":\n";
+    text_ += "    push rcx\n";
+    generate(node->body.get());
+    text_ += "    pop rcx\n";
+    text_ += "    dec rcx\n";
+    text_ += "    jnz ." + lbl + "\n";
 }

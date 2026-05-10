@@ -23,5 +23,7 @@ int str_counter_ = 0;
 void gen_block(Block* node);
 void gen_assign(Assign* node);
 void gen_output(Output* node);
+void gen_if(IfStmt* node);
+void gen_repeat(RepeatStmt* node);
 };
 #endif

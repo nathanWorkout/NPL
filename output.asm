@@ -1,9 +1,15 @@
 section .data
     nom db "nathan", 0
     nom_len equ $ - nom - 1
-    age dq 17
-    vrai dq 1
-    faux dq 0
+    age dq 18
+    __str2 db "majeur", 0
+    __str2_len equ $ - __str2 - 1
+    __str4 db "bg", 0
+    __str4_len equ $ - __str4 - 1
+    __str5 db "mineur", 0
+    __str5_len equ $ - __str5 - 1
+    __str7 db "Ceci est une boucle minimaliste !", 0
+    __str7_len equ $ - __str7 - 1
     itoa_buf times 21 db 0
     __newline db 0x0a
     true_msg db "true"
@@ -41,57 +47,64 @@ _start:
     mov rdx, 1
     syscall
     mov rax, [age]
-    call itoa
+    mov rbx, 18
+    cmp rax, rbx
+    jle .__ifnext1
     mov rax, 1
     mov rdi, 1
+    mov rsi, __str2
+    mov rdx, __str2_len
     syscall
     mov rax, 1
     mov rdi, 1
     mov rsi, __newline
     mov rdx, 1
     syscall
-    mov rax, [vrai]
-    test rax, rax
-    jz .__bool0_false
+    jmp .__ifend0
+.__ifnext1:
+    mov rax, [age]
+    mov rbx, 18
+    cmp rax, rbx
+    jne .__ifnext3
     mov rax, 1
     mov rdi, 1
-    mov rsi, true_msg
-    mov rdx, 4
+    mov rsi, __str4
+    mov rdx, __str4_len
     syscall
-    jmp .__bool0_end
-.__bool0_false:
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, false_msg
-    mov rdx, 5
-    syscall
-.__bool0_end:
     mov rax, 1
     mov rdi, 1
     mov rsi, __newline
     mov rdx, 1
     syscall
-    mov rax, [faux]
-    test rax, rax
-    jz .__bool1_false
+    jmp .__ifend0
+.__ifnext3:
     mov rax, 1
     mov rdi, 1
-    mov rsi, true_msg
-    mov rdx, 4
+    mov rsi, __str5
+    mov rdx, __str5_len
     syscall
-    jmp .__bool1_end
-.__bool1_false:
-    mov rax, 1
-    mov rdi, 1
-    mov rsi, false_msg
-    mov rdx, 5
-    syscall
-.__bool1_end:
     mov rax, 1
     mov rdi, 1
     mov rsi, __newline
     mov rdx, 1
     syscall
+.__ifend0:
+    mov rcx, 5
+.__repeat6:
+    push rcx
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, __str7
+    mov rdx, __str7_len
+    syscall
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, __newline
+    mov rdx, 1
+    syscall
+    pop rcx
+    dec rcx
+    jnz .__repeat6
     mov rax, 60
     xor rdi, rdi
     syscall
