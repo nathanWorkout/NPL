@@ -18,10 +18,10 @@ class Parser {
         Token& peek();
         Token& consume();
 
+        std::unique_ptr<ASTNode> parse_expr();
         std::unique_ptr<ASTNode> parse_statement();
         std::unique_ptr<ASTNode> parse_assign();
         std::unique_ptr<ASTNode> parse_output();
-        std::unique_ptr<ASTNode> parse_expr();
         std::unique_ptr<ASTNode> parse_if();
         std::unique_ptr<ASTNode> parse_while();
         std::unique_ptr<ASTNode> parse_for();

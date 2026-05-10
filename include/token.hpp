@@ -27,6 +27,9 @@ inline std::string token_type_str(TokenType t) {
         case TokenType::OPERATOR:   return "OPERATOR";
         case TokenType::PUNCTUATOR: return "PUNCTUATOR";
         case TokenType::BOOL:       return "BOOL";
+        case TokenType::OUTPUT: return "OUTPUT";
+        case TokenType::ARROW:  return "ARROW";
+        case TokenType::PIPE:   return "PIPE";
         default:                    return "UNKNOWN";
     }
 }

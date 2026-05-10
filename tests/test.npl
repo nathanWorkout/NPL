@@ -1,7 +1,5 @@
-age = 17.5
-nom = nathan
-string = "Hello, NPL !"
+nom = "nathan"
+>> nom
 
-if age > 18 -> >> string
-    elif age = 17.5 -> >> "bac + permis ?"
-    else age < 17.5 -> >> "pas encore mageur"
+age = 17
+>> age

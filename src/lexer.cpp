@@ -121,13 +121,14 @@ std::vector<Token> tokenize(const std::string& src)
         else
         {
             std::string two = src.substr(i, 2);
+            if(two == ">>") { tokens.push_back({TokenType::OUTPUT, two}); i += 2; continue; }
+            if(two == "->") { tokens.push_back({TokenType::ARROW, two}); i += 2; continue; }
             if(is_operator(two))
             {
                 tokens.push_back({TokenType::OPERATOR, two});
                 i += 2;
                 continue;
             }
-
             std::string one = src.substr(i, 1);
             if(is_operator(one))
             {

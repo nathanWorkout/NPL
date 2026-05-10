@@ -4,6 +4,9 @@
 #include <string>
 #include <vector>
 #include "lexer.hpp"
+#include "parser.hpp"
+#include "ast.hpp"
+#include "codegen.hpp"
 
 int main(int argc, char* argv[]) {
     if(argc < 2)
@@ -31,6 +34,13 @@ int main(int argc, char* argv[]) {
     std::cout << t.value << " -> " << token_type_str(t.type) << std::endl;
     }
     */
+
+    Parser parser(tokens);
+    auto ast = parser.parse();
+
+    Codegen codegen("output.asm");
+    codegen.generate(ast.get());
+    codegen.flush();
 
     return 0;
 }

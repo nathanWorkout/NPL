@@ -33,3 +33,11 @@ clean:
 	rm -rf $(BUILDDIR) $(TARGET) $(TARGET)_dbg
 
 re: clean all
+
+asm: debug
+	./$(TARGET)_dbg $(FILE)
+	nasm -f elf64 output.asm -o output.o
+	ld output.o -o output
+
+runasm: asm
+	./output

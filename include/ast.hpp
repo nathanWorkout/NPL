@@ -6,7 +6,7 @@
 #include <vector>
 
 struct ASTNode {
-    virtual ~ASTNode() = default; // Qaund on supprime un noeud ça le supprime bien
+    virtual ~ASTNode() = default; // Qaund on supprime un noeud ça le supprime
 };
 
 struct NumberLit : ASTNode {
