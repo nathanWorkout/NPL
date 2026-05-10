@@ -1,5 +1,9 @@
 nom = "nathan"
->> nom
-
 age = 17
+vrai = true
+faux = false
+
+>> nom
 >> age
+>> vrai
+>> faux

@@ -17,6 +17,7 @@ class Codegen {
         std::string text_;
         std::string text_prefix_;
         std::set<std::string> string_vars_;
+        std::set<std::string> bool_vars_;
         
 int str_counter_ = 0;
 void gen_block(Block* node);

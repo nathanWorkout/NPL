@@ -29,6 +29,8 @@ void Codegen::flush()
     text_ += "    syscall\n";
     data_ += "    itoa_buf times 21 db 0\n";
     data_ += "    __newline db 0x0a\n";
+    data_ += "    true_msg db \"true\"\n";
+    data_ += "    false_msg db \"false\"\n";
     out_ << "section .data\n";
     out_ << data_;
     out_ << "section .text\n";
@@ -69,6 +71,11 @@ if(auto n = dynamic_cast<StringLit*>(node->value.get()))
         data_ += "    " + node->name + "_len equ $ - " + node->name + " - 1\n";
         string_vars_.insert(node->name);
     }
+    else if(auto n = dynamic_cast<BoolLit*>(node->value.get()))
+    {
+        data_ += "    " + node->name + " dq " + (n->value ? "1" : "0") + "\n";
+        bool_vars_.insert(node->name);
+    }
     else if(auto n = dynamic_cast<NumberLit*>(node->value.get()))
     {
         data_ += "    " + node->name + " dq " + std::to_string((int)n->value) + "\n";
@@ -107,6 +114,27 @@ void Codegen::gen_output(Output* node)
 			text_ += "    syscall\n";
 			emit_newline();
 		}
+        else if(bool_vars_.count(n->name))
+        {
+            std::string lbl = "__bool" + std::to_string(str_counter_++);
+            text_ += "    mov rax, [" + n->name + "]\n";
+            text_ += "    test rax, rax\n";
+            text_ += "    jz ." + lbl + "_false\n";
+            text_ += "    mov rax, 1\n";
+            text_ += "    mov rdi, 1\n";
+            text_ += "    mov rsi, true_msg\n";
+            text_ += "    mov rdx, 4\n";
+            text_ += "    syscall\n";
+            text_ += "    jmp ." + lbl + "_end\n";
+            text_ += "." + lbl + "_false:\n";
+            text_ += "    mov rax, 1\n";
+            text_ += "    mov rdi, 1\n";
+            text_ += "    mov rsi, false_msg\n";
+            text_ += "    mov rdx, 5\n";
+            text_ += "    syscall\n";
+            text_ += "." + lbl + "_end:\n";
+            emit_newline();
+        }
 		else
 		{
 			text_ += "    mov rax, [" + n->name + "]\n";

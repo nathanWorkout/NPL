@@ -24,22 +24,19 @@ else -> >> "mineur"
 
 ## Boucles
 ```npl
-repeat 10 {
-    >> "it"
-}
+repeat 10 -> >> "it"
 
-while actif {
-    >> "run"
-}
 
-for i = 0; i < 10; i++ {
-    >> i
-}
+while actif -> >> "run"
+
+
+for i = 0; i < 10; i++ -> >> i
+
 ```
 
 ## Fonctions
 ```npl
-add(a, b) : a + b
+fn add(a, b) : a + b
 >> add(5, 3)
 ```
 
