@@ -107,4 +107,8 @@ struct InputStmt : ASTNode {
     std::string prompt;
 };
 
+struct UseStmt : ASTNode {
+    std::string lib;
+};
+
 #endif

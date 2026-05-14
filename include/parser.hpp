@@ -34,4 +34,5 @@ private:
     std::unique_ptr<ASTNode> parse_funcdef();
     std::unique_ptr<ASTNode> parse_funccall();
     std::unique_ptr<ASTNode> parse_return();
+    std::unique_ptr<ASTNode> parse_use();
 };

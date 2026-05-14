@@ -6,6 +6,9 @@
 #include <stdexcept>
 #include <cmath>
 #include <vector>
+#include <fstream>
+#include "parser.hpp"
+#include "lexer.hpp"
 
 struct Value
 {
@@ -89,6 +92,7 @@ private:
             throw ReturnException{eval(n->value.get())};
         }
         else if(auto n = dynamic_cast<InputStmt*>(node)) exec_input(n);
+        else if(auto n = dynamic_cast<UseStmt*>(node)) exec_use(n);
     }
 
     Value eval(ASTNode* node)
@@ -268,5 +272,20 @@ private:
         // essaie de convertir en nombre, sinon string
         try { vars_[node->name] = Value::from_num(std::stod(input)); }
         catch(...) { vars_[node->name] = Value::from_str(input); }
+    }
+
+    void exec_use(UseStmt* node) {
+        // cherche le fichier dans /usr/local/lib/npl/
+        std::string path = "/usr/local/lib/npl/" + node->lib + ".npl";
+        std::ifstream file(path);
+        if(!file.is_open())
+            throw std::runtime_error("Lib introuvable : " + node->lib);
+        std::string src((std::istreambuf_iterator<char>(file)),
+                        std::istreambuf_iterator<char>());
+        // tokenize + parse + run
+        auto tokens = tokenize(src);
+        Parser parser(tokens);
+        auto ast = parser.parse();
+        execute(ast.get());
     }
 };

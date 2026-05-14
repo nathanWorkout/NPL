@@ -72,6 +72,7 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
     if(peek().value == "repeat") return parse_repeat();
     if(peek().value == "while") return parse_while();
     if(peek().value == "for") return parse_for();
+    if(peek().value == "use") return parse_use();
 
     consume();
     return nullptr;
@@ -79,6 +80,20 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
 std::unique_ptr<ASTNode> Parser::parse_primary()
 {
     if(at_end()) return nullptr;
+
+    // Moins unaire
+    if(peek().type == TokenType::OPERATOR && peek().value == "-")
+    {
+        consume();
+        auto operand = parse_primary();
+        auto binop   = std::make_unique<BinOp>();
+        auto zero    = std::make_unique<NumberLit>();
+        zero->value  = 0.0;
+        binop->op    = "-";
+        binop->lhs   = std::move(zero);
+        binop->rhs   = std::move(operand);
+        return binop;
+    }
 
     if(peek().type == TokenType::NUMBER)
     {
@@ -103,7 +118,7 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
         std::string name = consume().value;
         if(!at_end() && peek().value == "(")
         {
-            consume();/*  */
+            consume();
             auto node = std::make_unique<FuncCall>();
             node->name = name;
             while(!at_end() && peek().value != ")")
@@ -118,7 +133,7 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
         {
             consume();
             auto node = std::make_unique<IndexExpr>();
-            node->name = name;
+            node->name  = name;
             node->index = parse_expr();
             consume();
             return node;
@@ -138,6 +153,13 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
         }
         consume();
         return node;
+    }
+    else if(peek().type == TokenType::PUNCTUATOR && peek().value == "(")
+    {
+        consume();
+        auto expr = parse_expr();
+        consume();
+        return expr;
     }
 
     return nullptr;
@@ -320,5 +342,13 @@ std::unique_ptr<ASTNode> Parser::parse_return()
     consume();
     auto node = std::make_unique<ReturnStmt>();
     node->value = parse_expr();
+    return node;
+}
+
+std::unique_ptr<ASTNode> Parser::parse_use()
+{
+    consume();
+    auto node = std::make_unique<UseStmt>();
+    node->lib = consume().value;
     return node;
 }

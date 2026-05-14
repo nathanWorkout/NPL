@@ -1,12 +1,13 @@
 # This is my programming langage :)
 # Simple programme : calculator
 
-fn add(number1, number2) -> << number1 + number2
-fn sub(number1, number2) -> << number1 - number2
-fn mult(number1, number2) -> << number1 * number2
-fn div(number1, number2) -> {
-    if number2 == 0 -> >> "Error : divide by 0"
-    else -> << number1 / number2
+fn add(a, b) -> << a + b
+fn sub(a, b) -> << a - b
+fn mult(a, b) -> << a * b
+
+fn div(a, b) -> {
+    if b == 0 -> >> "Error : divide by 0"
+    else -> << a / b
 }
 
 a = ?> "Premier nombre : "

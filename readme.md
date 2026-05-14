@@ -121,6 +121,10 @@ arr = [1, 2, 3]
 arr[1] = 99
 >> arr
 ```
+### Import
+```npl
+use math.npl
+```
 
 ---
 
@@ -159,4 +163,4 @@ b = ?> "Second number: "
 
 ## License
 
-GPL — open source, keep it open source.
+GPL - open source, keep it open source.
