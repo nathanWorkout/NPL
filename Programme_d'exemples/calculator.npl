@@ -1,0 +1,18 @@
+# This is my programming langage :)
+# Simple programme : calculator
+
+fn add(number1, number2) -> << number1 + number2
+fn sub(number1, number2) -> << number1 - number2
+fn mult(number1, number2) -> << number1 * number2
+fn div(number1, number2) -> {
+    if number2 == 0 -> >> "Error : divide by 0"
+    else -> << number1 / number2
+}
+
+a = ?> "Premier nombre : "
+b = ?> "Deuxieme nombre : "
+
+>> add(a, b)
+>> sub(a, b)
+>> mult(a, b)
+>> div(a, b)

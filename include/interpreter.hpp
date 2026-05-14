@@ -88,6 +88,7 @@ private:
         else if(auto n = dynamic_cast<ReturnStmt*>(node)) {
             throw ReturnException{eval(n->value.get())};
         }
+        else if(auto n = dynamic_cast<InputStmt*>(node)) exec_input(n);
     }
 
     Value eval(ASTNode* node)
@@ -258,5 +259,14 @@ private:
         }
         vars_ = saved_vars;
         return result;
+    }
+
+    void exec_input(InputStmt* node) {
+        if(!node->prompt.empty()) std::cout << node->prompt;
+        std::string input;
+        std::getline(std::cin, input);
+        // essaie de convertir en nombre, sinon string
+        try { vars_[node->name] = Value::from_num(std::stod(input)); }
+        catch(...) { vars_[node->name] = Value::from_str(input); }
     }
 };

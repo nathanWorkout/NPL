@@ -15,6 +15,7 @@ enum class TokenType {
     PIPE,
     BOOL,
     RETURN_TOK,
+    INPUT,
 
     UNKNOWN
 };

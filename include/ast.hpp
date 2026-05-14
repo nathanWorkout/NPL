@@ -102,4 +102,9 @@ struct ReturnStmt : ASTNode {
     std::unique_ptr<ASTNode> value;
 };
 
+struct InputStmt : ASTNode {
+    std::string name;
+    std::string prompt;
+};
+
 #endif

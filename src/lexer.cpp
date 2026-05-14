@@ -11,7 +11,7 @@ std::vector<std::string> keywords =
 };
 std::vector<std::string> operators =
 {
-    "+", "-", "*", "/", "=", "==", "!=", "<=", ">=", "<", ">", "->", ">>", "<<", "|", "&", "++", "--"
+    "+", "-", "*", "/", "=", "==", "!=", "<=", ">=", "<", ">", "->", ">>", "<<", "?>", "|", "&", "++", "--"
 };
 std::vector<std::string> punctuators =
 {
@@ -108,6 +108,7 @@ std::vector<Token> tokenize(const std::string& src)
             if(two == ">>") { tokens.push_back({TokenType::OUTPUT, two}); i += 2; continue; }
             if(two == "->") { tokens.push_back({TokenType::ARROW,  two}); i += 2; continue; }
             if(two == "<<") { tokens.push_back({TokenType::RETURN_TOK, two}); i += 2; continue; }
+            if(two == "?>") { tokens.push_back({TokenType::INPUT, two}); i += 2; continue; }
             if(is_operator(two))   { tokens.push_back({TokenType::OPERATOR,   two}); i += 2; continue; }
             std::string one = src.substr(i, 1);
             if(is_operator(one))   { tokens.push_back({TokenType::OPERATOR,   one}); i++; continue; }

@@ -5,6 +5,8 @@ Parser::Parser(std::vector<Token>& tokens) : tokens_(tokens) {}
 
 Token& Parser::peek()
 {
+    if(i >= tokens_.size())
+        throw std::runtime_error("Fin de fichier inattendue");
     return tokens_[i];
 }
 Token& Parser::consume()
@@ -165,6 +167,7 @@ std::unique_ptr<ASTNode> Parser::parse_cond()
         auto binop = std::make_unique<BinOp>();
         binop->lhs = std::move(left);
         binop->op  = consume().value;
+        if(at_end()) return binop;
         binop->rhs = parse_expr();
         return binop;
     }
@@ -203,7 +206,17 @@ std::unique_ptr<ASTNode> Parser::parse_assign()
         return node;
     }
 
-    consume(); 
+    consume();
+    if(!at_end() && peek().type == TokenType::INPUT)
+    {
+        consume();
+        auto node = std::make_unique<InputStmt>();
+        node->name = name;
+        if(!at_end() && peek().type == TokenType::STRING)
+            node->prompt = consume().value;
+        return node;
+    }
+
     auto node  = std::make_unique<Assign>();
     node->name = name;
     node->value = parse_expr();
