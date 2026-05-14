@@ -169,7 +169,7 @@ std::unique_ptr<ASTNode> Parser::parse_expr()
 {
     auto left = parse_primary();
 
-    while(!at_end() && peek().type == TokenType::OPERATOR && (peek().value == "+" || peek().value == "-" || peek().value == "*" || peek().value == "/"))
+    while(!at_end() && peek().type == TokenType::OPERATOR && (peek().value == "+" || peek().value == "-" || peek().value == "*" || peek().value == "/" || peek().value == "%"))
     {
         auto binop = std::make_unique<BinOp>();
         binop->lhs = std::move(left);

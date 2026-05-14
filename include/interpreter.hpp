@@ -165,6 +165,7 @@ private:
             if(n->op == "!=") return Value::from_bool(lv != rv);
             if(n->op == ">=") return Value::from_bool(lv >= rv);
             if(n->op == "<=") return Value::from_bool(lv <= rv);
+            if(n->op == "%")  return Value::from_num(std::fmod(lv, rv));
         }
         if(l.type == Value::Type::String && r.type == Value::Type::String) {
             if(n->op == "+")  return Value::from_str(l.str + r.str);
