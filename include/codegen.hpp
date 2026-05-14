@@ -25,5 +25,6 @@ void gen_assign(Assign* node);
 void gen_output(Output* node);
 void gen_if(IfStmt* node);
 void gen_repeat(RepeatStmt* node);
+void gen_while(WhileStmt* node);
 };
 #endif

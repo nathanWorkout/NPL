@@ -6,9 +6,11 @@
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "ast.hpp"
-#include "codegen.hpp"
+// #include "codegen.hpp"
+#include "interpreter.hpp"
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
     if(argc < 2)
     {
         std::cerr << "usage: <file.npl>" << std::endl;
@@ -28,19 +30,15 @@ int main(int argc, char* argv[]) {
 
     std::vector<Token> tokens = tokenize(src);
 
-    /*
-    for(auto& t : tokens)
-    {
-    std::cout << t.value << " -> " << token_type_str(t.type) << std::endl;
-    }
-    */
-
     Parser parser(tokens);
     auto ast = parser.parse();
 
-    Codegen codegen("output.asm");
-    codegen.generate(ast.get());
-    codegen.flush();
+    Interpreter interp;
+    interp.run(ast.get());
+
+    // Codegen codegen("output.asm");
+    // codegen.generate(ast.get());
+    // codegen.flush();
 
     return 0;
 }

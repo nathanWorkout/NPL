@@ -60,3 +60,5 @@ try {
     >> e
 }
 ```
+
+// A faire : commentaires, if prenom = "nathan" && age = 18 par exemple, les float...

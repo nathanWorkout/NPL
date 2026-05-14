@@ -77,10 +77,29 @@ struct FuncCall : ASTNode {
     std::vector<std::unique_ptr<ASTNode>> args;
 };
 
+struct ArrayLit : ASTNode {
+    std::vector<std::unique_ptr<ASTNode>> elements;
+};
+
+struct IndexExpr : ASTNode {
+    std::string name;
+    std::unique_ptr<ASTNode> index;
+};
+
+struct IndexAssign : ASTNode {
+    std::string name;
+    std::unique_ptr<ASTNode> index;
+    std::unique_ptr<ASTNode> value;
+};
+
 struct TryStmt : ASTNode {
     std::unique_ptr<ASTNode> body;
     std::string error_var;
     std::unique_ptr<ASTNode> catch_body;
+};
+
+struct ReturnStmt : ASTNode {
+    std::unique_ptr<ASTNode> value;
 };
 
 #endif

@@ -10,6 +10,8 @@ section .data
     __str5_len equ $ - __str5 - 1
     __str7 db "Ceci est une boucle minimaliste !", 0
     __str7_len equ $ - __str7 - 1
+    __str10 db "18", 0
+    __str10_len equ $ - __str10 - 1
     itoa_buf times 21 db 0
     __newline db 0x0a
     true_msg db "true"
@@ -105,6 +107,22 @@ _start:
     pop rcx
     dec rcx
     jnz .__repeat6
+.__wstart8:
+    mov rax, [age]
+    mov rbx, 18
+    cmp rax, rbx
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, __str10
+    mov rdx, __str10_len
+    syscall
+    mov rax, 1
+    mov rdi, 1
+    mov rsi, __newline
+    mov rdx, 1
+    syscall
+    jmp .__wstart8
+.__wend9:
     mov rax, 60
     xor rdi, rdi
     syscall

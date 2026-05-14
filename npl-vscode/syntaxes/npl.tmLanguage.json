@@ -1,0 +1,46 @@
+{
+  "name": "NPL",
+  "scopeName": "source.npl",
+  "fileTypes": ["npl"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#keywords" },
+    { "include": "#operators" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#booleans" },
+    { "include": "#functions" }
+  ],
+  "repository": {
+    "comments": {
+      "match": "#.*$",
+      "name": "comment.line.number-sign.npl"
+    },
+    "keywords": {
+      "match": "\\b(if|elif|else|while|for|repeat|fn)\\b",
+      "name": "keyword.control.npl"
+    },
+    "operators": {
+      "match": "(>>|->|\\+\\+|==|!=|<=|>=|[+\\-*/<>=])",
+      "name": "keyword.operator.npl"
+    },
+    "strings": {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.npl",
+      "patterns": []
+    },
+    "numbers": {
+      "match": "\\b[0-9]+(\\.[0-9]+)?\\b",
+      "name": "constant.numeric.npl"
+    },
+    "booleans": {
+      "match": "\\b(true|false)\\b",
+      "name": "constant.language.boolean.npl"
+    },
+    "functions": {
+      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\()",
+      "name": "entity.name.function.npl"
+    }
+  }
+}

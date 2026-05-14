@@ -1,0 +1,6 @@
+fn helloworld(world) -> {
+    >> world
+}
+
+world = "Nathan"
+helloworld(world)

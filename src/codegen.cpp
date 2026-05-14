@@ -57,6 +57,8 @@ void Codegen::generate(ASTNode* node)
     gen_if(n);
     else if(auto n = dynamic_cast<RepeatStmt*>(node))
     gen_repeat(n);
+    else if(auto n = dynamic_cast<WhileStmt*>(node))
+    gen_while(n);
 }
 
 void Codegen::gen_block(Block* node)
@@ -168,25 +170,39 @@ void Codegen::gen_if(IfStmt* node)
     {
         auto& [cond, body] = node->branches[i];
         std::string next_lbl = "__ifnext" + std::to_string(str_counter_++);
-        auto binop = dynamic_cast<BinOp*>(cond.get());
 
-        if(auto id = dynamic_cast<Identifier*>(binop->lhs.get()))
+        if(auto binop = dynamic_cast<BinOp*>(cond.get()))
+        {
+            if(auto id = dynamic_cast<Identifier*>(binop->lhs.get()))
+                text_ += "    mov rax, [" + id->name + "]\n";
+            else if(auto num = dynamic_cast<NumberLit*>(binop->lhs.get()))
+                text_ += "    mov rax, " + std::to_string((int)num->value) + "\n";
+
+            if(auto id = dynamic_cast<Identifier*>(binop->rhs.get()))
+                text_ += "    mov rbx, [" + id->name + "]\n";
+            else if(auto num = dynamic_cast<NumberLit*>(binop->rhs.get()))
+                text_ += "    mov rbx, " + std::to_string((int)num->value) + "\n";
+
+            text_ += "    cmp rax, rbx\n";
+            if(binop->op == ">")  text_ += "    jle ." + next_lbl + "\n";
+            else if(binop->op == "<")  text_ += "    jge ." + next_lbl + "\n";
+            else if(binop->op == "==") text_ += "    jne ." + next_lbl + "\n";
+            else if(binop->op == "!=") text_ += "    je ."  + next_lbl + "\n";
+            else if(binop->op == ">=") text_ += "    jl ."  + next_lbl + "\n";
+            else if(binop->op == "<=") text_ += "    jg ."  + next_lbl + "\n";
+        }
+        else if(auto id = dynamic_cast<Identifier*>(cond.get()))
+        {
+            // if flag
             text_ += "    mov rax, [" + id->name + "]\n";
-        else if(auto num = dynamic_cast<NumberLit*>(binop->lhs.get()))
-            text_ += "    mov rax, " + std::to_string((int)num->value) + "\n";
-
-        if(auto id = dynamic_cast<Identifier*>(binop->rhs.get()))
-            text_ += "    mov rbx, [" + id->name + "]\n";
-        else if(auto num = dynamic_cast<NumberLit*>(binop->rhs.get()))
-            text_ += "    mov rbx, " + std::to_string((int)num->value) + "\n";
-
-        text_ += "    cmp rax, rbx\n";
-        if(binop->op == ">") text_ += "    jle ." + next_lbl + "\n";
-        else if(binop->op == "<") text_ += "    jge ." + next_lbl + "\n";
-        else if(binop->op == "==") text_ += "    jne ." + next_lbl + "\n";
-        else if(binop->op == "!=") text_ += "    je ." + next_lbl + "\n";
-        else if(binop->op == ">=") text_ += "    jl ." + next_lbl + "\n";
-        else if(binop->op == "<=") text_ += "    jg ." + next_lbl + "\n";
+            text_ += "    test rax, rax\n";
+            text_ += "    jz ." + next_lbl + "\n";
+        }
+        else if(auto b = dynamic_cast<BoolLit*>(cond.get()))
+        {
+            // if true / if false
+            if(!b->value) text_ += "    jmp ." + next_lbl + "\n";
+        }
 
         generate(body.get());
         text_ += "    jmp ." + end_lbl + "\n";
@@ -218,4 +234,44 @@ void Codegen::gen_repeat(RepeatStmt* node)
     text_ += "    pop rcx\n";
     text_ += "    dec rcx\n";
     text_ += "    jnz ." + lbl + "\n";
+}
+
+
+void Codegen::gen_while(WhileStmt* node)
+{
+    std::string start_lbl = "__wstart" + std::to_string(str_counter_++);
+    std::string end_lbl   = "__wend"   + std::to_string(str_counter_++);
+
+    text_ += "." + start_lbl + ":\n";
+
+    if(auto binop = dynamic_cast<BinOp*>(node->condition.get()))
+    {
+        if(auto id = dynamic_cast<Identifier*>(binop->lhs.get()))
+            text_ += "    mov rax, [" + id->name + "]\n";
+        else if(auto num = dynamic_cast<NumberLit*>(binop->lhs.get()))
+            text_ += "    mov rax, " + std::to_string((int)num->value) + "\n";
+
+        if(auto id = dynamic_cast<Identifier*>(binop->rhs.get()))
+            text_ += "    mov rbx, [" + id->name + "]\n";
+        else if(auto num = dynamic_cast<NumberLit*>(binop->rhs.get()))
+            text_ += "    mov rbx, " + std::to_string((int)num->value) + "\n";
+
+        text_ += "    cmp rax, rbx\n";
+        if(binop->op == ">")  text_ += "    jle ." + end_lbl + "\n";
+        else if(binop->op == "<")  text_ += "    jge ." + end_lbl + "\n";
+        else if(binop->op == "==") text_ += "    jne ." + end_lbl + "\n";
+        else if(binop->op == "!=") text_ += "    je ."  + end_lbl + "\n";
+        else if(binop->op == ">=") text_ += "    jl ."  + end_lbl + "\n";
+        else if(binop->op == "<=") text_ += "    jg ."  + end_lbl + "\n";
+    }
+    else if(auto id = dynamic_cast<Identifier*>(node->condition.get()))
+    {
+        text_ += "    mov rax, [" + id->name + "]\n";
+        text_ += "    test rax, rax\n";
+        text_ += "    jz ." + end_lbl + "\n";
+    }
+
+    generate(node->body.get());
+    text_ += "    jmp ." + start_lbl + "\n";
+    text_ += "." + end_lbl + ":\n";
 }
