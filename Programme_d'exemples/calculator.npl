@@ -17,3 +17,5 @@ b = ?> "Deuxieme nombre : "
 >> sub(a, b)
 >> mult(a, b)
 >> div(a, b)
+
+>> string_length("hello")

@@ -16,6 +16,7 @@ all: $(TARGET)
 
 $(TARGET): $(OBJS)
 	$(CXX) $(CXXFLAGS) $(RELFLAGS) -o $@ $^
+	sudo cp $(TARGET) /usr/local/bin/$(TARGET)
 
 debug: $(OBJS)
 	$(CXX) $(CXXFLAGS) $(DBGFLAGS) -o $(TARGET)_dbg $^

@@ -34,6 +34,10 @@ int main(int argc, char* argv[])
     auto ast = parser.parse();
 
     Interpreter interp;
+    interp.register_native("string_length", [](std::vector<Value> args) {
+        return Value::from_num(args[0].str.size());
+    });
+    std::cout << "native registered\n";
     interp.run(ast.get());
 
     // Codegen codegen("output.asm");

@@ -7,6 +7,7 @@
 #include <cmath>
 #include <vector>
 #include <fstream>
+#include <functional>
 #include "parser.hpp"
 #include "lexer.hpp"
 
@@ -70,6 +71,11 @@ class Interpreter
 {
 public:
     void run(ASTNode* node) { execute(node); }
+    std::unordered_map<std::string, std::function<Value(std::vector<Value>)>> natives_;
+    void register_native(const std::string& name, std::function<Value(std::vector<Value>)> fn)
+    {
+        natives_[name] = fn;
+    }
 
 private:
     std::unordered_map<std::string, Value> vars_;
@@ -244,6 +250,14 @@ private:
     }
 
     Value exec_funccall(FuncCall* node) {
+        auto nat = natives_.find(node->name);
+        if(nat != natives_.end())
+        {
+            std::vector<Value> args;
+            for(auto& a : node->args)
+                args.push_back(eval(a.get()));
+            return nat->second(args);
+        }
         auto it = funcs_.find(node->name);
         if(it == funcs_.end())
             throw std::runtime_error("Fonction inconnue : " + node->name);
