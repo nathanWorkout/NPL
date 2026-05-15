@@ -21,17 +21,40 @@ fn clamp(val, min, max) -> {
 
 fn pow(base, exp) -> {
     result = 1
+
     repeat exp -> result = result * base
     << result
 }
 
 fn floor(n) -> {
     remainder = n % 1
-    n = n - remainder
-    << n
+
+    if remainder != 0 && n < 0 -> {
+        << n - (1 + remainder)
+    }
+    else -> << n - remainder
 }
 
->> floor(3.7)
->> floor(-4.5)
+fn ceil(n) -> {
+    remainder = n % 1
+
+    if remainder ==  0 -> << n
+    elif n > 0 -> << n - remainder + 1
+    else -> << n - remainder
+}
+
+fn round(n) -> {
+    remainder = abs(n % 1)
+    
+    if n > 0 -> {
+        if remainder < 0.5 -> << floor(n - remainder)
+        if remainder > 0.5 -> << ceil(n - remainder + 1)
+    }
+    else -> {
+        if remainder < 0.5 -> << ceil(n + remainder)
+        if remainder > 0.5 -> << floor(n + remainder - 1)
+    }
+}
+
 
 

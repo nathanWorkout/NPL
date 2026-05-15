@@ -183,8 +183,24 @@ std::unique_ptr<ASTNode> Parser::parse_expr()
 
 std::unique_ptr<ASTNode> Parser::parse_cond()
 {
+    auto left = parse_comparison();
+
+    while(!at_end() && peek().type == TokenType::OPERATOR && (peek().value == "&&" || peek().value == "||"))
+    {
+        auto binop = std::make_unique<BinOp>();
+        binop->lhs = std::move(left);
+        binop->op  = consume().value;
+        binop->rhs = parse_comparison();
+        left = std::move(binop);
+    }
+    return left;
+}
+
+
+std::unique_ptr<ASTNode> Parser::parse_comparison()
+{
     auto left = parse_expr();
-    if(!at_end() && peek().type == TokenType::OPERATOR && peek().value != "->" && peek().value != ">>")
+    if(!at_end() && peek().type == TokenType::OPERATOR && peek().value != "->" && peek().value != ">>" && peek().value != "&&" && peek().value != "||")
     {
         auto binop = std::make_unique<BinOp>();
         binop->lhs = std::move(left);

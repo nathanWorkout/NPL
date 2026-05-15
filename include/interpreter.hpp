@@ -175,8 +175,8 @@ private:
         if(l.type == Value::Type::Bool && r.type == Value::Type::Bool) {
             if(n->op == "==") return Value::from_bool(l.flag == r.flag);
             if(n->op == "!=") return Value::from_bool(l.flag != r.flag);
-            if(n->op == "&")  return Value::from_bool(l.flag && r.flag);
-            if(n->op == "|")  return Value::from_bool(l.flag || r.flag);
+            if(n->op == "&&")  return Value::from_bool(l.flag && r.flag);
+            if(n->op == "||")  return Value::from_bool(l.flag || r.flag);
         }
 
         throw std::runtime_error("Opérateur invalide : " + n->op);
