@@ -80,6 +80,7 @@ public:
 private:
     std::unordered_map<std::string, Value> vars_;
     std::unordered_map<std::string, FuncDef*> funcs_;
+    std::vector<std::unique_ptr<ASTNode>> loaded_asts_;
 
     void execute(ASTNode* node)
     {
@@ -290,17 +291,16 @@ private:
     }
 
     void exec_use(UseStmt* node) {
-        // cherche le fichier dans /usr/local/lib/npl/
         std::string path = "/usr/local/lib/npl/" + node->lib + ".npl";
         std::ifstream file(path);
         if(!file.is_open())
             throw std::runtime_error("Lib introuvable : " + node->lib);
         std::string src((std::istreambuf_iterator<char>(file)),
                         std::istreambuf_iterator<char>());
-        // tokenize + parse + run
         auto tokens = tokenize(src);
         Parser parser(tokens);
         auto ast = parser.parse();
-        execute(ast.get());
+        loaded_asts_.push_back(std::move(ast));
+        execute(loaded_asts_.back().get());
     }
 };

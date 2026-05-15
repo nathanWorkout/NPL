@@ -366,5 +366,9 @@ std::unique_ptr<ASTNode> Parser::parse_use()
     consume();
     auto node = std::make_unique<UseStmt>();
     node->lib = consume().value;
+    while(!at_end() && peek().type == TokenType::OPERATOR && peek().value == "/") {
+        consume();
+        node->lib += "/" + consume().value;
+    }
     return node;
 }

@@ -1,0 +1,21 @@
+# std/string - showcase all functions with Hello World examples
+
+use std/string
+
+s = "  Hello, World!  "
+
+>> len(s)                                # length including spaces -> 17
+>> trim(s)                               # remove leading/trailing spaces -> Hello, World!
+>> up(s)                                 # uppercase -> HELLO, WORLD!
+>> low(s)                                # lowercase ->   hello, world!  
+
+>> has(s, "World")                       # check if "World" is in s -> true
+>> has(s, "Python")                      # check if "Python" is in s -> false
+
+>> starts(s, "  Hell")                   # check if s starts with "  Hell" -> true
+>> ends(s, "!  ")                        # check if s ends with "!  " -> true
+
+>> replace(s, "World", "NPL")            # replace "World" by "NPL" ->   Hello, NPL!  
+
+>> split("hello,world,npl", ",")         # split by comma -> [hello, world, npl]
+>> join(["Hello", "World", "NPL"], " ")  # join with space -> Hello World NPL

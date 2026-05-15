@@ -1,0 +1,27 @@
+fn len(arr) -> << array_length(arr)
+fn push(arr, val) -> << array_push(arr, val)
+fn pop(arr) -> << array_pop(arr)
+fn last(arr) -> << array_last(arr)
+fn slice(arr, from, to) -> << array_slice(arr, from, to)
+fn reverse(arr) -> << array_reverse(arr)
+
+fn contains(arr, val) -> {
+    i = 0
+    while i < len(arr) -> {
+        if arr[i] == val -> << true
+        i++
+    }
+    << false
+}
+
+fn first(arr) -> << arr[0]
+
+fn sum(arr) -> {
+    total = 0
+    i = 0
+    while i < len(arr) -> {
+        total = total + arr[i]
+        i++
+    }
+    << total
+}
