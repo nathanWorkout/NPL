@@ -140,6 +140,11 @@ int main(int argc, char* argv[])
         return Value::from_arr(arr);
     });
 
+    // Lib math, l'exponentielle est faisable en npl pur, mais en terme de performance le c++ est bien meilleur
+    interp.register_native("math_exp", [](std::vector<Value> args) {
+        return Value::from_num(std::exp(args[0].num));
+    });
+
     interp.run(ast.get());
 
     // Codegen codegen("output.asm");

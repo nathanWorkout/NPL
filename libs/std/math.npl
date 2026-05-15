@@ -56,5 +56,7 @@ fn round(n) -> {
     }
 }
 
+fn exp(x) -> << math_exp(x)
+
 
 
