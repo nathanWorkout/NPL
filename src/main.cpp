@@ -165,6 +165,17 @@ int main(int argc, char* argv[])
         return Value::from_str("null");
     });
 
+    interp.register_native("string_char_at", [](std::vector<Value> args) -> Value {
+        if(args[0].type != Value::Type::String) throw std::runtime_error("string_char_at: attend une string");
+        if(args[1].type != Value::Type::Number) throw std::runtime_error("string_char_at: attend un index");
+        size_t i = (size_t)args[1].num;
+        if(i >= args[0].str.size()) throw std::runtime_error("string_char_at: index hors limites");
+        return Value::from_str(std::string(1, args[0].str[i]));
+    });
+
+    interp.register_native("string_to_num", [](std::vector<Value> args) -> Value {
+        return Value::from_num(std::stod(args[0].str));
+    });
 
     interp.run(ast.get());
 

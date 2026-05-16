@@ -149,6 +149,10 @@ private:
         else if(auto n = dynamic_cast<ReturnStmt*>(node))  throw ReturnException{eval(n->value.get())};
         else if(auto n = dynamic_cast<InputStmt*>(node))   exec_input(n);
         else if(auto n = dynamic_cast<UseStmt*>(node))     exec_use(n);
+        else if(auto n = dynamic_cast<TryStmt*>(node))     exec_try(n);
+        else if(auto n = dynamic_cast<ThrowStmt*>(node)) {
+            throw std::runtime_error(eval(n->value.get()).to_display());
+        }
     }
 
     Value eval(ASTNode* node)
@@ -195,12 +199,24 @@ private:
 
         if(auto n = dynamic_cast<BinOp*>(node))   return eval_binop(n);
         if(auto n = dynamic_cast<FuncCall*>(node)) return exec_funccall(n);
+        if(auto n = dynamic_cast<NullLit*>(node)) return Value::null();
 
         return Value::null();
     }
 
     Value eval_binop(BinOp* n)
     {
+        if(n->op == "&&") {
+            Value left = eval(n->lhs.get());
+            if(!left.truthy()) return Value::from_bool(false);
+            return Value::from_bool(eval(n->rhs.get()).truthy());
+        }
+        if(n->op == "||") {
+            Value left = eval(n->lhs.get());
+            if(left.truthy()) return Value::from_bool(true);
+            return Value::from_bool(eval(n->rhs.get()).truthy());
+        }
+
         Value l = eval(n->lhs.get());
         Value r = eval(n->rhs.get());
 
@@ -225,12 +241,10 @@ private:
             if(n->op == "+")  return Value::from_str(l.str + r.str);
             if(n->op == "==") return Value::from_bool(l.str == r.str);
             if(n->op == "!=") return Value::from_bool(l.str != r.str);
-        }
-        if(l.type == Value::Type::Bool && r.type == Value::Type::Bool) {
-            if(n->op == "==") return Value::from_bool(l.flag == r.flag);
-            if(n->op == "!=") return Value::from_bool(l.flag != r.flag);
-            if(n->op == "&&") return Value::from_bool(l.flag && r.flag);
-            if(n->op == "||") return Value::from_bool(l.flag || r.flag);
+            if(n->op == "<")  return Value::from_bool(l.str < r.str);
+            if(n->op == ">")  return Value::from_bool(l.str > r.str);
+            if(n->op == "<=") return Value::from_bool(l.str <= r.str);
+            if(n->op == ">=") return Value::from_bool(l.str >= r.str);
         }
         if(l.type == Value::Type::String && r.type == Value::Type::Number) {
             if(n->op == "+") return Value::from_str(l.str + r.to_display());
@@ -355,5 +369,16 @@ private:
         auto ast = parser.parse();
         loaded_asts_.push_back(std::move(ast));
         execute(loaded_asts_.back().get());
+    }
+
+    void exec_try(TryStmt* node) {
+        try {
+            execute(node->body.get());
+        } catch(std::runtime_error& e) {
+            push_scope();
+            ScopeGuard guard{scopes_};
+            def_var(node->error_var, Value::from_str(e.what()));
+            execute(node->catch_body.get());
+        }
     }
 };

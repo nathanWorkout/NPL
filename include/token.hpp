@@ -16,6 +16,7 @@ enum class TokenType {
     BOOL,
     RETURN_TOK,
     INPUT,
+    NULL_TOK,
 
     UNKNOWN
 };

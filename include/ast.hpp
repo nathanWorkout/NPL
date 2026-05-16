@@ -115,4 +115,10 @@ struct MapLit : ASTNode {
     std::vector<std::pair<std::string, std::unique_ptr<ASTNode>>> entries;
 };
 
+struct ThrowStmt : ASTNode {
+    std::unique_ptr<ASTNode> value;
+};
+
+struct NullLit : ASTNode {};
+
 #endif

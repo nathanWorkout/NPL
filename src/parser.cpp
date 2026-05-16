@@ -73,6 +73,8 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
     if(peek().value == "while") return parse_while();
     if(peek().value == "for") return parse_for();
     if(peek().value == "use") return parse_use();
+    if(peek().value == "try") return parse_try();
+    if(peek().value == "throw") return parse_throw();
 
     consume();
     return nullptr;
@@ -81,7 +83,6 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
 {
     if(at_end()) return nullptr;
 
-    // Moins unaire
     if(peek().type == TokenType::OPERATOR && peek().value == "-")
     {
         consume();
@@ -176,6 +177,12 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
         }
         consume();
         return node;
+    }
+
+    else if(peek().type == TokenType::NULL_TOK)
+    {
+        consume();
+        return std::make_unique<NullLit>();  
     }
 
     return nullptr;
@@ -386,5 +393,29 @@ std::unique_ptr<ASTNode> Parser::parse_use()
         consume();
         node->lib += "/" + consume().value;
     }
+    return node;
+}
+
+std::unique_ptr<ASTNode> Parser::parse_try()
+{
+    consume();
+    auto node = std::make_unique<TryStmt>();
+    node->body = parse_body();
+    
+    if(at_end() || peek().value != "catch")
+        throw std::runtime_error("try sans catch");
+    consume(); 
+    
+    node->error_var = consume().value;
+    
+    node->catch_body = parse_body();
+    return node;
+}
+
+std::unique_ptr<ASTNode> Parser::parse_throw()
+{
+    consume();
+    auto node = std::make_unique<ThrowStmt>();
+    node->value = parse_expr();
     return node;
 }

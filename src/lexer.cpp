@@ -7,7 +7,7 @@
 
 std::vector<std::string> keywords =
 {
-    "if", "elif", "else", "while", "for", "repeat", "try", "catch", "use"
+    "if", "elif", "else", "while", "for", "repeat", "try", "catch", "throw", "use",
 };
 std::vector<std::string> operators =
 {
@@ -75,6 +75,27 @@ std::vector<Token> tokenize(const std::string& src)
             tokens.push_back({TokenType::STRING, value});
             continue;
         }
+
+        else if(src[i] == '\'')
+        {
+            i++;
+            std::string value;
+            while(i < src.size() && src[i] != '\'')
+            {
+                if(src[i] == '\\' && i+1 < src.size())
+                {
+                    char esc = src[++i];
+                    if(esc == 'n')  value += '\n';
+                    else if(esc == 't') value += '\t';
+                    else value += esc;
+                }
+                else value += src[i];
+                i++;
+            }
+            i++; 
+            tokens.push_back({TokenType::STRING, value});
+            continue;
+        }
         else if(isdigit(src[i]))
         {
             std::string value;
@@ -96,6 +117,8 @@ std::vector<Token> tokenize(const std::string& src)
                 value += src[i++];
             if(value == "true" || value == "false")
                 tokens.push_back({TokenType::BOOL, value});
+            else if(value == "null")
+                tokens.push_back({TokenType::NULL_TOK, value});
             else if(is_keyword(value))
                 tokens.push_back({TokenType::KEYWORD, value});
             else
