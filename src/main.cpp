@@ -177,6 +177,10 @@ int main(int argc, char* argv[])
         return Value::from_num(std::stod(args[0].str));
     });
 
+    interp.register_native("string_to_str", [](std::vector<Value> args) -> Value {
+        return Value::from_str(args[0].to_display());
+    });
+
     interp.run(ast.get());
 
     // Codegen codegen("output.asm");

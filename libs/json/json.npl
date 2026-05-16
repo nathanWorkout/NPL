@@ -1,5 +1,23 @@
 use std/array
 use std/string
+fn stringify_array(arr) -> {
+    result = "["
+    i = 0
+    while i < array_length(arr) -> {
+        value = arr[i]
+        type = value_type(value)
+        if type == "string" -> result = result + "\"" + value + "\""
+        elif type == "number" -> result = result + to_string(value)
+        elif type == "bool" -> result = result + to_string(value)
+        elif type == "map" -> result = result + stringify(value)
+        elif type == "array" -> result = result + stringify_array(value)
+        elif type == "null" -> result = result + "null"
+        if i < array_length(arr) - 1 -> result = result + ", "
+        i++
+    }
+    result = result + "]"
+    << result
+}
 
 fn stringify(data) -> {
     keys = map_keys(data)
@@ -11,9 +29,11 @@ fn stringify(data) -> {
         type = value_type(value)
         result = result + "\"" + key + "\": "
         if type == "string" -> result = result + "\"" + value + "\""
-        elif type == "number" -> result = result + value
-        elif type == "bool" -> result = result + value
+        elif type == "number" -> result = result + to_string(value)
+        elif type == "bool" -> result = result + to_string(value)
         elif type == "map" -> result = result + stringify(value)
+        elif type == "array" -> result = result + stringify_array(value)
+        elif type == "null" -> result = result + "null"
         if i < array_length(keys) - 1 -> result = result + ", "
         i++
     }
@@ -22,7 +42,7 @@ fn stringify(data) -> {
 }
 
 fn parse_string(s, i) -> {
-    if char_at(s, i) == '"' -> i++
+    i++
     str_result = ""
     while char_at(s, i) != '"' -> {
         str_result = str_result + char_at(s, i)
@@ -34,6 +54,10 @@ fn parse_string(s, i) -> {
 
 fn parse_number(s, i) -> {
     num_result = ""
+    if i < len(s) && char_at(s, i) == "-" -> {
+        num_result = num_result + "-"
+        i++
+    }
     while i < len(s) && char_at(s, i) >= "0" && char_at(s, i) <= "9" -> {
         num_result = num_result + char_at(s, i)
         i++
@@ -62,7 +86,6 @@ fn parse_bool(s, i) -> {
     }
     << {"value": false, "i": i + 5}
 }
-
 fn parse_null(s, i) -> {
     << {"value": null, "i": i + 4}
 }
@@ -78,6 +101,30 @@ fn parse_value(s, i) -> {
     if c == "[" -> << parse_array(s, i)
     if c >= "0" && c <= "9" -> << parse_number(s, i)
     if c == "-" -> << parse_number(s, i)
+}
+
+fn parse_object(s, i) -> {
+    i++
+    obj_result = {}
+    i = skip_ws(s, i)
+    while char_at(s, i) != "}" -> {
+        i = skip_ws(s, i)
+        key = parse_string(s, i)
+        i = key["i"]
+        i = skip_ws(s, i)
+        i++
+        i = skip_ws(s, i)
+        val = parse_value(s, i)
+        obj_result[key["value"]] = val["value"]
+        i = val["i"]
+        i = skip_ws(s, i)
+        if char_at(s, i) == "," -> {
+            i++
+            i = skip_ws(s, i)
+        }
+    }
+    i = i + 1
+    << {"value": obj_result, "i": i}
 }
 
 fn parse_array(s, i) -> {
@@ -103,18 +150,24 @@ fn parse_object(s, i) -> {
     while char_at(s, i) != "}" -> {
         i = skip_ws(s, i)
         key = parse_string(s, i)
-        i = key["i"]
+        tmp = key["i"]
+        i = tmp
         i = skip_ws(s, i)
         i++
         i = skip_ws(s, i)
         val = parse_value(s, i)
+        tmp = val["i"]
         obj_result[key["value"]] = val["value"]
-        i = val["i"]
+        i = tmp
         i = skip_ws(s, i)
-        if char_at(s, i) == "," -> i++
+        if char_at(s, i) == "," -> {
+            i++
+            i = skip_ws(s, i)
+        }
     }
-    i++
-    << {"value": obj_result, "i": i}
+    i = i + 1
+    result_i = i + 0
+    << {"value": obj_result, "i": result_i}
 }
 
 fn parse(s) -> {

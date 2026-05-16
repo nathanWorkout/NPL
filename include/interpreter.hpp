@@ -261,7 +261,7 @@ private:
     }
 
     void exec_assign(Assign* node) {
-        set_var(node->name, eval(node->value.get()));
+        def_var(node->name, eval(node->value.get()));
     }
 
     void exec_index_assign(IndexAssign* node) {
