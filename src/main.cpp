@@ -145,6 +145,27 @@ int main(int argc, char* argv[])
         return Value::from_num(std::exp(args[0].num));
     });
 
+    // Impossible sans ça de faire le json strinify en npl pur
+    interp.register_native("map_keys", [](std::vector<Value> args) {
+        std::vector<Value> keys;
+        for(auto& [k, v] : args[0].map)
+            keys.push_back(Value::from_str(k));
+        return Value::from_arr(keys);
+    });
+
+    interp.register_native("value_type", [](std::vector<Value> args) {
+        switch(args[0].type) {
+            case Value::Type::Number: return Value::from_str("number");
+            case Value::Type::String: return Value::from_str("string");
+            case Value::Type::Bool:   return Value::from_str("bool");
+            case Value::Type::Array:  return Value::from_str("array");
+            case Value::Type::Map:    return Value::from_str("map");
+            case Value::Type::Null:   return Value::from_str("null");
+        }
+        return Value::from_str("null");
+    });
+
+
     interp.run(ast.get());
 
     // Codegen codegen("output.asm");

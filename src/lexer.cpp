@@ -15,7 +15,7 @@ std::vector<std::string> operators =
 };
 std::vector<std::string> punctuators =
 {
-    ",", ";", "(", ")", "{", "}", "[", "]"
+    ",", ";", "(", ")", "{", "}", "[", "]", ":"
 };
 
 bool is_keyword(const std::string& word)

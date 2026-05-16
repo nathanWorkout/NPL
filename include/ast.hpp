@@ -111,4 +111,8 @@ struct UseStmt : ASTNode {
     std::string lib;
 };
 
+struct MapLit : ASTNode {
+    std::vector<std::pair<std::string, std::unique_ptr<ASTNode>>> entries;
+};
+
 #endif

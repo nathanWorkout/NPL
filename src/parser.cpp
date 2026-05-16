@@ -162,6 +162,22 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
         return expr;
     }
 
+    else if(peek().type == TokenType::PUNCTUATOR && peek().value == "{")
+    {
+        consume();
+        auto node = std::make_unique<MapLit>();
+        while(!at_end() && !(peek().type == TokenType::PUNCTUATOR && peek().value == "}"))
+        {
+            std::string key = consume().value;
+            consume();
+            auto val = parse_expr();
+            node->entries.push_back({key, std::move(val)});
+            if(!at_end() && peek().value == ",") consume();
+        }
+        consume();
+        return node;
+    }
+
     return nullptr;
 }
 

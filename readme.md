@@ -1,4 +1,4 @@
-# NPL — Nathan Programming Language
+# NPL - Nathan Programming Language
 > A fast-to-write language for power users who don't want to deal with Java's verbosity.
 
 NPL is a lightweight interpreted language written in C++. It uses symbols over keywords to keep code short and expressive — built for people who live in the terminal and want to write fast.
@@ -113,6 +113,15 @@ arr[1] = 99
 >> arr
 ```
 
+### Maps
+```npl
+m = {"name": "Alice", "age": 30}
+>> m["name"]        # -> Alice
+>> m["age"]         # -> 30
+m["age"] = 31
+>> m["age"]         # -> 31
+```
+
 ### Import
 ```npl
 use std/string
@@ -150,6 +159,7 @@ b = ?> "Second number: "
 | String  | `"hello"`       |
 | Bool    | `true`, `false` |
 | Array   | `[1, 2, 3]`     |
+| Map     | `{"key": val}` |
 
 ---
 
@@ -248,21 +258,6 @@ arr = slice(arr, 1, 3)  # -> [1, 4]
 | `slice(arr, from, to)` | Sub-array from index to index (excluded) |
 | `sum(arr)` | Sum of all numbers |
 
----
-
-## Roadmap
-
-- [x] Interpreter core
-- [x] std/string
-- [x] std/math
-- [x] std/array
-- [ ] Maps/Dicts
-- [ ] json/json
-- [ ] io/file, io/dir
-- [ ] sys/env, sys/time, sys/process
-- [ ] net/socket, net/dns
-- [ ] http/request, http/response, http/server
-- [ ] db/storage, db/query
 
 ---
 

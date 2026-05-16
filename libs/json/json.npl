@@ -1,0 +1,22 @@
+use std/array
+use std/string
+
+fn stringify(data) -> {
+    keys = map_keys(data)
+    result = "{"
+    i = 0
+    while i < array_length(keys) -> {
+        key = keys[i]
+        value = data[key]
+        type = value_type(value)
+        result = result + "\"" + key + "\": "
+        if type == "string" -> result = result + "\"" + value + "\""
+        elif type == "number" -> result = result + value
+        elif type == "bool" -> result = result + value
+        elif type == "map" -> result = result + stringify(value)
+        if i < array_length(keys) - 1 -> result = result + ", "
+        i++
+    }
+    result = result + "}"
+    << result
+}
