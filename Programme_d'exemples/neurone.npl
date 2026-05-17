@@ -1,0 +1,32 @@
+w1 = 0.5
+w2 = -0.3
+b  = 0.1
+x1 = 1.0
+x2 = 0.5
+y  = 1.0
+lr = 0.1
+
+fn sigmoid(z) -> {
+    << 1.0 / (1.0 + math_exp(0 - z))
+}
+
+z = (w1 * x1) + (w2 * x2) + b
+a = sigmoid(z)
+E = (a - y) * (a - y)
+
+>> "z = " + z
+>> "a = " + a
+>> "E = " + E
+>> ""
+
+repeat 1000 -> {
+    z  = (w1 * x1) + (w2 * x2) + b
+    a  = sigmoid(z)
+    E  = (a - y) * (a - y)
+    >> "E = " + E
+    derive = 2 * (a - y) * (a * (1 - a)) * x1
+    w1 = w1 - (lr * derive)
+}
+
+>> ""
+>> "w = " + w1
