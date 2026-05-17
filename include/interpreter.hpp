@@ -8,6 +8,7 @@
 #include <vector>
 #include <fstream>
 #include <functional>
+#include <unordered_set>
 #include "parser.hpp"
 #include "lexer.hpp"
 
@@ -65,7 +66,11 @@ struct Value
                 bool first = true;
                 for(auto& [k, v] : map) {
                     if(!first) s += ", ";
-                    s += "\"" + k + "\": " + v.to_display();
+
+                    if(v.type == Type::String)
+                        s += "\"" + k + "\": \"" + v.str + "\"";
+                    else
+                        s += "\"" + k + "\": " + v.to_display();
                     first = false;
                 }
                 return s + "}";
@@ -90,8 +95,14 @@ class Interpreter
 public:
     void run(ASTNode* node) {
         push_scope();
+
+        if(auto block = dynamic_cast<Block*>(node)) {
+            for(auto& s : block->statements)
+                if(auto fn = dynamic_cast<FuncDef*>(s.get()))
+                    exec_funcdef(fn);
+        }
         execute(node);
-    }
+}
 
     std::unordered_map<std::string, std::function<Value(std::vector<Value>)>> natives_;
     void register_native(const std::string& name, std::function<Value(std::vector<Value>)> fn)
@@ -103,27 +114,33 @@ private:
     std::vector<std::unordered_map<std::string, Value>> scopes_;
     std::unordered_map<std::string, FuncDef*> funcs_;
     std::vector<std::unique_ptr<ASTNode>> loaded_asts_;
+    std::unordered_set<std::string> loaded_libs_;
 
     void push_scope() { scopes_.push_back({}); }
     void pop_scope()  { scopes_.pop_back(); }
 
-    Value get_var(const std::string& name) {
-        for(int i = scopes_.size() - 1; i >= 0; i--)
-            if(scopes_[i].count(name)) return scopes_[i][name];
-        throw std::runtime_error("Variable inconnue : " + name);
-    }
-
     void set_var(const std::string& name, Value val) {
-        for(int i = scopes_.size() - 1; i >= 0; i--)
+        for(int i = scopes_.size() - 1; i >= 0; i--) {
             if(scopes_[i].count(name)) {
                 scopes_[i][name] = val;
                 return;
             }
+            if(scopes_[i].count("__fn_boundary__")) {
+                scopes_[i][name] = val; 
+                return;
+            }
+        }
         scopes_.back()[name] = val;
     }
 
     void def_var(const std::string& name, Value val) {
         scopes_.back()[name] = val;
+    }
+
+    Value get_var(const std::string& name) {
+        for(int i = scopes_.size() - 1; i >= 0; i--)
+            if(scopes_[i].count(name)) return scopes_[i][name];
+        throw std::runtime_error("Variable inconnue : " + name);
     }
 
     Value& get_var_ref(const std::string& name) {
@@ -182,19 +199,24 @@ private:
         if(auto n = dynamic_cast<IndexExpr*>(node)) {
             Value container = get_var(n->name);
             Value idx = eval(n->index.get());
+
             if(container.type == Value::Type::Array) {
-                if(idx.type != Value::Type::Number) throw std::runtime_error("Index tableau doit être un nombre");
-                size_t i = (size_t)idx.num;
-                if(i >= container.arr.size()) throw std::runtime_error("Index hors limites");
+                size_t i = (idx.type == Value::Type::Number) ? (size_t)idx.num : (size_t)std::stod(idx.str);
+                
+                if(i >= container.arr.size()) throw std::runtime_error("Index tableau hors limites : " + std::to_string(i));
                 return container.arr[i];
             }
+            
             if(container.type == Value::Type::Map) {
-                if(idx.type != Value::Type::String) throw std::runtime_error("Clé map doit être une string");
+                if(idx.type != Value::Type::String) {
+                    idx = Value::from_str(idx.to_display());
+                }
                 auto it = container.map.find(idx.str);
-                if(it == container.map.end()) throw std::runtime_error("Clé introuvable : " + idx.str);
+                if(it == container.map.end()) throw std::runtime_error("Clé introuvable dans la map : " + idx.str);
                 return it->second;
             }
-            throw std::runtime_error(n->name + " n'est pas un tableau ou une map");
+            
+            throw std::runtime_error("L'objet '" + n->name + "' n'est ni un tableau ni une map");
         }
 
         if(auto n = dynamic_cast<BinOp*>(node))   return eval_binop(n);
@@ -204,56 +226,70 @@ private:
         return Value::null();
     }
 
-    Value eval_binop(BinOp* n)
-    {
-        if(n->op == "&&") {
+    Value eval_binop(BinOp* n) {
+        if (n->op == "&&") {
             Value left = eval(n->lhs.get());
-            if(!left.truthy()) return Value::from_bool(false);
-            return Value::from_bool(eval(n->rhs.get()).truthy());
+            if (!left.truthy()) return Value::from_bool(false);
+            Value right = eval(n->rhs.get());
+            return Value::from_bool(right.truthy());
         }
-        if(n->op == "||") {
+        if (n->op == "||") {
             Value left = eval(n->lhs.get());
-            if(left.truthy()) return Value::from_bool(true);
-            return Value::from_bool(eval(n->rhs.get()).truthy());
+            if (left.truthy()) return Value::from_bool(true);
+            Value right = eval(n->rhs.get());
+            return Value::from_bool(right.truthy());
         }
 
         Value l = eval(n->lhs.get());
         Value r = eval(n->rhs.get());
 
-        if(l.type == Value::Type::Number && r.type == Value::Type::Number) {
-            double lv = l.num, rv = r.num;
-            if(n->op == "+")  return Value::from_num(lv + rv);
-            if(n->op == "-")  return Value::from_num(lv - rv);
-            if(n->op == "*")  return Value::from_num(lv * rv);
-            if(n->op == "/") {
-                if(rv == 0.0) throw std::runtime_error("Division par zéro");
-                return Value::from_num(lv / rv);
-            }
-            if(n->op == ">")  return Value::from_bool(lv >  rv);
-            if(n->op == "<")  return Value::from_bool(lv <  rv);
-            if(n->op == "==") return Value::from_bool(lv == rv);
-            if(n->op == "!=") return Value::from_bool(lv != rv);
-            if(n->op == ">=") return Value::from_bool(lv >= rv);
-            if(n->op == "<=") return Value::from_bool(lv <= rv);
-            if(n->op == "%")  return Value::from_num(std::fmod(lv, rv));
-        }
-        if(l.type == Value::Type::String && r.type == Value::Type::String) {
-            if(n->op == "+")  return Value::from_str(l.str + r.str);
-            if(n->op == "==") return Value::from_bool(l.str == r.str);
-            if(n->op == "!=") return Value::from_bool(l.str != r.str);
-            if(n->op == "<")  return Value::from_bool(l.str < r.str);
-            if(n->op == ">")  return Value::from_bool(l.str > r.str);
-            if(n->op == "<=") return Value::from_bool(l.str <= r.str);
-            if(n->op == ">=") return Value::from_bool(l.str >= r.str);
-        }
-        if(l.type == Value::Type::String && r.type == Value::Type::Number) {
-            if(n->op == "+") return Value::from_str(l.str + r.to_display());
-        }
-        if(l.type == Value::Type::Number && r.type == Value::Type::String) {
-            if(n->op == "+") return Value::from_str(l.to_display() + r.str);
+        if (n->op == "+" && (l.type == Value::Type::String || r.type == Value::Type::String)) {
+            return Value::from_str(l.to_display() + r.to_display());
         }
 
-        throw std::runtime_error("Opérateur invalide : " + n->op);
+        auto to_double = [](const Value& v) {
+            if (v.type == Value::Type::Number) return v.num;
+            if (v.type == Value::Type::String) {
+                try { return std::stod(v.str); } catch (...) { return 0.0; }
+            }
+            if (v.type == Value::Type::Bool) return v.flag ? 1.0 : 0.0;
+            return 0.0;
+        };
+
+        if (l.type == Value::Type::Number || r.type == Value::Type::Number) {
+            double lv = to_double(l);
+            double rv = to_double(r);
+
+            if (n->op == "+")  return Value::from_num(lv + rv);
+            if (n->op == "-")  return Value::from_num(lv - rv);
+            if (n->op == "*")  return Value::from_num(lv * rv);
+            if (n->op == "/")  return Value::from_num(rv == 0 ? 0 : lv / rv);
+            if (n->op == "%")  return Value::from_num(std::fmod(lv, rv));
+            if (n->op == "==") return Value::from_bool(lv == rv);
+            if (n->op == "!=") return Value::from_bool(lv != rv);
+            if (n->op == ">")  return Value::from_bool(lv >  rv);
+            if (n->op == "<")  return Value::from_bool(lv <  rv);
+            if (n->op == ">=") return Value::from_bool(lv >= rv);
+            if (n->op == "<=") return Value::from_bool(lv <= rv);
+        }
+
+        if (l.type == Value::Type::String && r.type == Value::Type::String) {
+            if (n->op == "+")  return Value::from_str(l.str + r.str);
+            if (n->op == "==") return Value::from_bool(l.str == r.str);
+            if (n->op == "!=") return Value::from_bool(l.str != r.str);
+            if (n->op == ">")  return Value::from_bool(l.str >  r.str);
+            if (n->op == "<")  return Value::from_bool(l.str <  r.str);
+            if (n->op == ">=") return Value::from_bool(l.str >= r.str);
+            if (n->op == "<=") return Value::from_bool(l.str <= r.str);
+        }
+
+        if (l.type == Value::Type::Bool && r.type == Value::Type::Bool) {
+            if (n->op == "==") return Value::from_bool(l.flag == r.flag);
+            if (n->op == "!=") return Value::from_bool(l.flag != r.flag);
+        }
+
+        throw std::runtime_error("Type Mismatch : Impossible d'utiliser l'opérateur '" + 
+                                n->op + "' entre " + l.to_display() + " et " + r.to_display());
     }
 
     void exec_block(Block* node) {
@@ -261,7 +297,7 @@ private:
     }
 
     void exec_assign(Assign* node) {
-        def_var(node->name, eval(node->value.get()));
+        set_var(node->name, eval(node->value.get()));
     }
 
     void exec_index_assign(IndexAssign* node) {
@@ -315,7 +351,7 @@ private:
         }
     }
 
-    void exec_funcdef(FuncDef* node) {
+   void exec_funcdef(FuncDef* node) {
         funcs_[node->name] = node;
     }
 
@@ -327,28 +363,35 @@ private:
                 args.push_back(eval(a.get()));
             return nat->second(args);
         }
+
         auto it = funcs_.find(node->name);
         if(it == funcs_.end()) throw std::runtime_error("Fonction inconnue : " + node->name);
 
         FuncDef* func = it->second;
-        if(node->args.size() != func->params.size()) throw std::runtime_error("Nombre d'arguments incorrect pour : " + node->name);
+        if(node->args.size() != func->params.size()) 
+            throw std::runtime_error("Nombre d'arguments incorrect pour : " + node->name);
 
         std::vector<Value> arg_vals;
-        for(size_t i = 0; i < func->params.size(); i++) arg_vals.push_back(eval(node->args[i].get()));
+        for(size_t i = 0; i < func->params.size(); i++) 
+            arg_vals.push_back(eval(node->args[i].get()));
 
         push_scope();
         ScopeGuard guard{scopes_};
+        def_var("__fn_boundary__", Value::from_bool(true));
 
-        for(size_t i = 0; i < func->params.size(); i++) def_var(func->params[i], arg_vals[i]);
+        for(size_t i = 0; i < func->params.size(); i++) 
+            def_var(func->params[i], arg_vals[i]);
 
-        Value result = Value::null();
+        Value result = Value::null(); 
         try {
             execute(func->body.get());
         } catch(ReturnException& ret) {
             result = ret.value;
         }
 
-        return result;
+        
+
+        return result; 
     }
 
     void exec_input(InputStmt* node) {
@@ -360,6 +403,11 @@ private:
     }
 
     void exec_use(UseStmt* node) {
+        if(loaded_libs_.count(node->lib)) {
+            return; 
+        }
+        loaded_libs_.insert(node->lib);
+        
         std::string path = "/usr/local/lib/npl/" + node->lib + ".npl";
         std::ifstream file(path);
         if(!file.is_open()) throw std::runtime_error("Lib introuvable : " + node->lib);
@@ -368,6 +416,11 @@ private:
         Parser parser(tokens);
         auto ast = parser.parse();
         loaded_asts_.push_back(std::move(ast));
+        if(auto block = dynamic_cast<Block*>(loaded_asts_.back().get())) {
+            for(auto& s : block->statements)
+                if(auto fn = dynamic_cast<FuncDef*>(s.get()))
+                    exec_funcdef(fn);
+        }
         execute(loaded_asts_.back().get());
     }
 

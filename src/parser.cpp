@@ -60,15 +60,18 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
     if(peek().value == "fn") return parse_funcdef();
     if(peek().type == TokenType::IDENTIFIER)
     {
-        if(i+1 < tokens_.size() && tokens_[i+1].value == "(")
-            return parse_funccall();
+        if(i+1 < tokens_.size() && tokens_[i+1].value == "(") return parse_funccall(); 
         return parse_assign();
     }
     if(peek().type == TokenType::OUTPUT) return parse_output();
     if(peek().type == TokenType::RETURN_TOK) return parse_return();
     if(peek().value == "if") return parse_if();
-    if(peek().value == "elif") { consume(); return nullptr; }
-    if(peek().value == "else") { consume(); return nullptr; }
+    
+    if(peek().value == "elif" || peek().value == "else") { 
+        consume(); 
+        return nullptr; 
+    }
+    
     if(peek().value == "repeat") return parse_repeat();
     if(peek().value == "while") return parse_while();
     if(peek().value == "for") return parse_for();
@@ -79,22 +82,10 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
     consume();
     return nullptr;
 }
+
 std::unique_ptr<ASTNode> Parser::parse_primary()
 {
     if(at_end()) return nullptr;
-
-    if(peek().type == TokenType::OPERATOR && peek().value == "-")
-    {
-        consume();
-        auto operand = parse_primary();
-        auto binop   = std::make_unique<BinOp>();
-        auto zero    = std::make_unique<NumberLit>();
-        zero->value  = 0.0;
-        binop->op    = "-";
-        binop->lhs   = std::move(zero);
-        binop->rhs   = std::move(operand);
-        return binop;
-    }
 
     if(peek().type == TokenType::NUMBER)
     {
@@ -188,19 +179,35 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
     return nullptr;
 }
 
-std::unique_ptr<ASTNode> Parser::parse_expr()
+std::unique_ptr<ASTNode> Parser::parse_term()
 {
-    auto left = parse_primary();
+    auto left = parse_unary(); 
 
-    while(!at_end() && peek().type == TokenType::OPERATOR && (peek().value == "+" || peek().value == "-" || peek().value == "*" || peek().value == "/" || peek().value == "%"))
+    while(!at_end() && peek().type == TokenType::OPERATOR && 
+         (peek().value == "*" || peek().value == "/" || peek().value == "%"))
     {
         auto binop = std::make_unique<BinOp>();
         binop->lhs = std::move(left);
         binop->op  = consume().value;
-        binop->rhs = parse_primary();
+        binop->rhs = parse_unary(); 
         left = std::move(binop);
     }
+    return left;
+}
 
+std::unique_ptr<ASTNode> Parser::parse_expr()
+{
+    auto left = parse_term();
+
+    while(!at_end() && peek().type == TokenType::OPERATOR && 
+         (peek().value == "+" || peek().value == "-"))
+    {
+        auto binop = std::make_unique<BinOp>();
+        binop->lhs = std::move(left);
+        binop->op  = consume().value;
+        binop->rhs = parse_term();
+        left = std::move(binop);
+    }
     return left;
 }
 
@@ -237,14 +244,14 @@ std::unique_ptr<ASTNode> Parser::parse_comparison()
 
 std::unique_ptr<ASTNode> Parser::parse_assign()
 {
-    std::string name = consume().value;
+    std::string name = consume().value; 
 
     if(!at_end() && peek().value == "[")
     {
         consume();
         auto idx = parse_expr();
         consume();
-        consume();
+        if(peek().value == "=") consume(); 
         auto node = std::make_unique<IndexAssign>();
         node->name = name;
         node->index = std::move(idx);
@@ -267,7 +274,10 @@ std::unique_ptr<ASTNode> Parser::parse_assign()
         return node;
     }
 
-    consume();
+    if(!at_end() && peek().value == "=") {
+        consume(); 
+    }
+
     if(!at_end() && peek().type == TokenType::INPUT)
     {
         consume();
@@ -418,4 +428,20 @@ std::unique_ptr<ASTNode> Parser::parse_throw()
     auto node = std::make_unique<ThrowStmt>();
     node->value = parse_expr();
     return node;
+}
+
+std::unique_ptr<ASTNode> Parser::parse_unary()
+{
+    if (!at_end() && peek().type == TokenType::OPERATOR && peek().value == "-")
+    {
+        consume();
+        auto node = std::make_unique<BinOp>();
+        auto zero = std::make_unique<NumberLit>();
+        zero->value = 0.0;
+        node->op = "-";
+        node->lhs = std::move(zero);
+        node->rhs = parse_unary(); 
+        return node;
+    }
+    return parse_primary();
 }

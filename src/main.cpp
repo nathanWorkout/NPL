@@ -142,6 +142,7 @@ int main(int argc, char* argv[])
 
     // Lib math, l'exponentielle est faisable en npl pur, mais en terme de performance le c++ est bien meilleur
     interp.register_native("math_exp", [](std::vector<Value> args) {
+        if(args.empty()) return Value::from_num(0.0);
         return Value::from_num(std::exp(args[0].num));
     });
 
@@ -178,6 +179,11 @@ int main(int argc, char* argv[])
     });
 
     interp.register_native("string_to_str", [](std::vector<Value> args) -> Value {
+        return Value::from_str(args[0].to_display());
+    });
+
+    interp.register_native("to_string", [](std::vector<Value> args) {
+        if(args.empty()) return Value::from_str("");
         return Value::from_str(args[0].to_display());
     });
 

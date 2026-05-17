@@ -1,5 +1,6 @@
 use std/array
 use std/string
+
 fn stringify_array(arr) -> {
     result = "["
     i = 0
@@ -41,6 +42,15 @@ fn stringify(data) -> {
     << result
 }
 
+fn skip_ws(s, i) -> {
+    while i < len(s) -> {
+        c = char_at(s, i)
+        if c == " " || c == "\n" || c == "\t" -> i++
+        else -> << i
+    }
+    << i
+}
+
 fn parse_string(s, i) -> {
     i++
     str_result = ""
@@ -52,32 +62,39 @@ fn parse_string(s, i) -> {
     << {"value": str_result, "i": i}
 }
 
+fn is_digit(c) -> {
+    if c == "0" -> << true
+    if c == "1" -> << true
+    if c == "2" -> << true
+    if c == "3" -> << true
+    if c == "4" -> << true
+    if c == "5" -> << true
+    if c == "6" -> << true
+    if c == "7" -> << true
+    if c == "8" -> << true
+    if c == "9" -> << true
+    << false
+}
+
 fn parse_number(s, i) -> {
     num_result = ""
     if i < len(s) && char_at(s, i) == "-" -> {
         num_result = num_result + "-"
         i++
     }
-    while i < len(s) && char_at(s, i) >= "0" && char_at(s, i) <= "9" -> {
+    while i < len(s) && is_digit(char_at(s, i)) -> {
         num_result = num_result + char_at(s, i)
         i++
     }
     if i < len(s) && char_at(s, i) == "." -> {
         num_result = num_result + "."
         i++
-        while i < len(s) && char_at(s, i) >= "0" && char_at(s, i) <= "9" -> {
+        while i < len(s) && is_digit(char_at(s, i)) -> {
             num_result = num_result + char_at(s, i)
             i++
         }
     }
-    << {"value": num_result, "i": i}
-}
-
-fn skip_ws(s, i) -> {
-    while i < len(s) && char_at(s, i) == " " -> {
-        i++
-    }
-    << i
+    << {"value": to_num(num_result), "i": i}
 }
 
 fn parse_bool(s, i) -> {
@@ -86,21 +103,28 @@ fn parse_bool(s, i) -> {
     }
     << {"value": false, "i": i + 5}
 }
+
 fn parse_null(s, i) -> {
     << {"value": null, "i": i + 4}
 }
 
-fn parse_value(s, i) -> {
+fn parse_array(s, i) -> {
+    i++
+    result = []
     i = skip_ws(s, i)
-    c = char_at(s, i)
-    if c == '"' -> << parse_string(s, i)
-    if c == "t" -> << parse_bool(s, i)
-    if c == "f" -> << parse_bool(s, i)
-    if c == "n" -> << parse_null(s, i)
-    if c == "{" -> << parse_object(s, i)
-    if c == "[" -> << parse_array(s, i)
-    if c >= "0" && c <= "9" -> << parse_number(s, i)
-    if c == "-" -> << parse_number(s, i)
+    while char_at(s, i) != "]" -> {
+        i = skip_ws(s, i)
+        res = parse_value(s, i)
+        result = array_push(result, res["value"])
+        i = res["i"]
+        i = skip_ws(s, i)
+        if char_at(s, i) == "," -> {
+            i++
+            i = skip_ws(s, i)
+        }
+    }
+    i++
+    << {"value": result, "i": i}
 }
 
 fn parse_object(s, i) -> {
@@ -123,51 +147,21 @@ fn parse_object(s, i) -> {
             i = skip_ws(s, i)
         }
     }
-    i = i + 1
+    i++
     << {"value": obj_result, "i": i}
 }
 
-fn parse_array(s, i) -> {
-    i++
-    result = []
+fn parse_value(s, i) -> {
     i = skip_ws(s, i)
-    while char_at(s, i) != "]" -> {
-        i = skip_ws(s, i)
-        res = parse_value(s, i)
-        result = array_push(result, res["value"])
-        i = res["i"]
-        i = skip_ws(s, i)
-        if char_at(s, i) == "," -> i++
-    }
-    i++
-    << {"value": result, "i": i}
-}
-
-fn parse_object(s, i) -> {
-    i++
-    obj_result = {}
-    i = skip_ws(s, i)
-    while char_at(s, i) != "}" -> {
-        i = skip_ws(s, i)
-        key = parse_string(s, i)
-        tmp = key["i"]
-        i = tmp
-        i = skip_ws(s, i)
-        i++
-        i = skip_ws(s, i)
-        val = parse_value(s, i)
-        tmp = val["i"]
-        obj_result[key["value"]] = val["value"]
-        i = tmp
-        i = skip_ws(s, i)
-        if char_at(s, i) == "," -> {
-            i++
-            i = skip_ws(s, i)
-        }
-    }
-    i = i + 1
-    result_i = i + 0
-    << {"value": obj_result, "i": result_i}
+    c = char_at(s, i)
+    if c == '"' -> << parse_string(s, i)
+    if c == "t" -> << parse_bool(s, i)
+    if c == "f" -> << parse_bool(s, i)
+    if c == "n" -> << parse_null(s, i)
+    if c == "{" -> << parse_object(s, i)
+    if c == "[" -> << parse_array(s, i)
+    if c >= "0" && c <= "9" -> << parse_number(s, i)
+    if c == "-" -> << parse_number(s, i)
 }
 
 fn parse(s) -> {
