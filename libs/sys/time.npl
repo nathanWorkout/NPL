@@ -1,0 +1,26 @@
+fn time() -> << time_now()
+
+fn get_date(ts) -> {
+    p = time_parts(ts)
+    << {
+        "day":   p["day"],
+        "month": p["month"],
+        "year":  p["year"],
+        "hour":  p["hours"],
+        "min":   p["minutes"],
+        "sec":   p["seconds"]
+    }
+}
+
+fn format_time(ts) -> {
+    p = time_parts(ts)
+    h = p["hours"]
+    m = p["minutes"]
+    s = p["seconds"]
+    << h + ":" + m + ":" + s
+}
+
+fn format_date(ts) -> {
+    p = time_parts(ts)
+    << p["day"] + "/" + p["month"] + "/" + p["year"]
+}

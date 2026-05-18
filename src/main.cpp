@@ -3,6 +3,9 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <ctime>
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "ast.hpp"
@@ -185,6 +188,29 @@ int main(int argc, char* argv[])
     interp.register_native("to_string", [](std::vector<Value> args) {
         if(args.empty()) return Value::from_str("");
         return Value::from_str(args[0].to_display());
+    });
+
+    interp.register_native("time_now", [](std::vector<Value> args) {
+        time_t t = time(nullptr);
+        struct tm* tm = localtime(&t);
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%02d/%02d/%04d %02d:%02d:%02d",
+            tm->tm_mday, tm->tm_mon + 1, tm->tm_year + 1900,
+            tm->tm_hour, tm->tm_min, tm->tm_sec);
+        return Value::from_str(buf);
+    });
+
+    interp.register_native("time_parts", [](std::vector<Value> args) {
+        time_t t = (time_t)args[0].num;
+        struct tm* tm = localtime(&t);
+        std::unordered_map<std::string, Value> result;
+        result["seconds"] = Value::from_num(tm->tm_sec);
+        result["minutes"] = Value::from_num(tm->tm_min);
+        result["hours"]   = Value::from_num(tm->tm_hour);
+        result["day"]     = Value::from_num(tm->tm_mday);
+        result["month"]   = Value::from_num(tm->tm_mon + 1);
+        result["year"]    = Value::from_num(tm->tm_year + 1900);
+        return Value::from_map(result);
     });
 
     interp.run(ast.get());
