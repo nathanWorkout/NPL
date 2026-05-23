@@ -218,6 +218,22 @@ use sys/time
 
 ---
 
+## Pipeline
+The `|` operator passes the result of the left side as `item` to the right side.
+```npl
+nombres = [1, 2, 3, 4, 5]
+
+# filter — keep elements matching the condition
+nombres | filter { << item > 3 } | >>
+
+# map — transform each element
+nombres | each { << item * 2 } | >>
+
+# chaining
+nombres | filter { << item > 2 } | each { << item * 10 } | >>
+```
+`item` is the current element at each stage.
+
 ## Comments
 
 ```npl

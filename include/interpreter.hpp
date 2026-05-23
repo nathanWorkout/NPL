@@ -170,6 +170,7 @@ private:
         else if(auto n = dynamic_cast<ThrowStmt*>(node)) {
             throw std::runtime_error(eval(n->value.get()).to_display());
         }
+        else if(auto n = dynamic_cast<ExprStatement*>(node)) eval(n->expr.get());
     }
 
     Value eval(ASTNode* node)
@@ -222,6 +223,7 @@ private:
         if(auto n = dynamic_cast<BinOp*>(node))   return eval_binop(n);
         if(auto n = dynamic_cast<FuncCall*>(node)) return exec_funccall(n);
         if(auto n = dynamic_cast<NullLit*>(node)) return Value::null();
+        if(auto n = dynamic_cast<PipeExpr*>(node)) return eval_pipe(n);
 
         return Value::null();
     }
@@ -433,5 +435,75 @@ private:
             def_var(node->error_var, Value::from_str(e.what()));
             execute(node->catch_body.get());
         }
+    }
+
+    Value eval_pipe(PipeExpr* n)
+    {
+        Value left = eval(n->lhs.get());
+
+
+        if(auto out = dynamic_cast<Output*>(n->rhs.get())) {
+            if(left.type == Value::Type::Array) {
+                for(auto& item : left.arr)
+                    std::cout << item.to_display() << "\n";
+            } else {
+                std::cout << left.to_display() << "\n";
+            }
+            return left;
+        }
+
+
+        if(auto lambda = dynamic_cast<LambdaBlock*>(n->rhs.get())) {
+            if(left.type == Value::Type::Array) {
+                std::vector<Value> result;
+                for(auto& item : left.arr) {
+                    push_scope();
+                    ScopeGuard guard{scopes_};
+                    def_var("item", item);
+                    Value val = Value::null();
+                    try { execute(lambda->body.get()); }
+                    catch(ReturnException& ret) { val = ret.value; }
+                    result.push_back(val);
+                }
+                return Value::from_arr(result);
+            }
+            return left;
+        }
+
+        if(auto call = dynamic_cast<FuncCall*>(n->rhs.get())) {
+            if(call->name == "filter") {
+                auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
+                if(!lambda) throw std::runtime_error("filter attend un bloc { }");
+                std::vector<Value> result;
+                for(auto& item : left.arr) {
+                    push_scope();
+                    ScopeGuard guard{scopes_};
+                    def_var("item", item);
+                    Value cond = Value::null();
+                    try { execute(lambda->body.get()); }
+                    catch(ReturnException& ret) { cond = ret.value; }
+                    if(cond.truthy()) result.push_back(item);
+                }
+                return Value::from_arr(result);
+            }
+
+            if(call->name == "each") {
+                auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
+                if(!lambda) throw std::runtime_error("each attend un bloc { }");
+                std::vector<Value> result;
+                for(auto& item : left.arr) {
+                    push_scope();
+                    ScopeGuard guard{scopes_};
+                    def_var("item", item);
+                    Value val = Value::null();
+                    try { execute(lambda->body.get()); }
+                    catch(ReturnException& ret) { val = ret.value; }
+                    result.push_back(val);
+                }
+                return Value::from_arr(result);
+            }
+        }
+
+        return left;
     }
 };

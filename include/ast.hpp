@@ -121,4 +121,17 @@ struct ThrowStmt : ASTNode {
 
 struct NullLit : ASTNode {};
 
+struct PipeExpr : ASTNode {
+    std::unique_ptr<ASTNode> lhs;
+    std::unique_ptr<ASTNode> rhs;
+};
+
+struct LambdaBlock : ASTNode {
+    std::unique_ptr<ASTNode> body;
+};
+
+struct ExprStatement : ASTNode {
+    std::unique_ptr<ASTNode> expr;
+};
+
 #endif

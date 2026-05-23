@@ -147,8 +147,31 @@ try -> {
     >> "Caught: " + err
 }
 ```
+## Pipeline
+```npl
+nombres = [1, 2, 3, 4, 5]
 
----
+# filter — garde les éléments qui passent la condition
+nombres | filter { << item > 3 } | >>
+# 4
+# 5
+
+# map — transforme chaque élément
+nombres | map { << item * 10 } | >>
+# 10
+# 20
+# 30
+# 40
+# 50
+
+# chaînage — filter puis map
+nombres | filter { << item > 2 } | map { << item * 10 } | >>
+# 30
+# 40
+# 50
+```
+
+
 
 ## Single neuron — gradient descent
 

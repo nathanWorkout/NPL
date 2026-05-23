@@ -17,6 +17,7 @@ En comparant NPL avec Node.js/Express sur de vrais projets, NPL réduit la quant
 | `?>` | lire une entrée |
 | `->` | corps de bloc |
 | `use` | importer une librairie |
+| `\|` | pipeline (chaîner des opérations) |
 
 ```npl
 fn add(a, b) -> << a + b
@@ -124,8 +125,7 @@ Testé sur Linux (Arch/Artix). Nécessite g++ C++23 et make.
 ✅ Try/catch/throw
 ✅ std/string, std/array, std/math, std/json, sys/time
 ✅ Système de modules (use)
-
-🚧 Opérateur pipeline |
+✅ Opérateur pipeline |
 ⬜ io/  — lecture/écriture de fichiers
 ⬜ sys/ — environnement, processus
 ⬜ net/ — UDP, socket, SSE
