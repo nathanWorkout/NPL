@@ -59,25 +59,35 @@ fn sigmoid(z) -> {
     << 1.0 / (1.0 + math_exp(0 - z))
 }
 
-z = (w1 * x1) + (w2 * x2) + b
-a = sigmoid(z)
-E = (a - y) * (a - y)
->> "z = " + z
->> "a = " + a
->> "E = " + E
->> ""
+fn get_loss(pred, target) -> {
+    error = pred - target
+    << error * error
+}
 
 repeat 1000 -> {
-    z  = (w1 * x1) + (w2 * x2) + b
-    a  = sigmoid(z)
-    E  = (a - y) * (a - y)
-    >> "E = " + E
-    derive = 2 * (a - y) * (a * (1 - a)) * x1
-    w1 = w1 - (lr * derive)
+    z = (w1 * x1) + (w2 * x2) + b
+    a = sigmoid(z)
+    
+    E = get_loss(a, y)
+    >> "Loss = " + E
+    
+    dz = 2 * (a - y) * (a * (1.0 - a))
+    
+    dw1 = dz * x1
+    dw2 = dz * x2
+    db  = dz * 1.0
+    
+    w1 = w1 - (lr * dw1)
+    w2 = w2 - (lr * dw2)
+    b  = b - (lr * db)
 }
 
 >> ""
->> "w = " + w1
+>> "w1 final = " + w1
+>> "w2 final = " + w2
+>> "b final  = " + b
+>> "Prediction finale = " + sigmoid((w1 * x1) + (w2 * x2) + b)
+
 ```
 
 ### std/string
