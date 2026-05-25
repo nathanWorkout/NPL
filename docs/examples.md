@@ -171,6 +171,26 @@ nombres | filter { << item > 2 } | map { << item * 10 } | >>
 # 50
 ```
 
+## File I/O
+
+use io/file
+use io/dir
+
+# Écrire et lire un fichier
+write("hello.txt", "Hello World!\n")
+>> read("hello.txt")           # Hello World!
+
+# Vérifier l'existence
+if file_exists("hello.txt") -> {
+    >> "Le fichier existe"
+    delete("hello.txt")        # Supprimer
+}
+
+# Travailler avec les dossiers
+dir_create("data")
+dir_list(".") | each { >> item }
+dir_exists("data")             # true
+
 
 
 ## Single neuron — gradient descent

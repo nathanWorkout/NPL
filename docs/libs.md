@@ -120,3 +120,69 @@ date = get_date(ts)
 >> date["day"] + "/" + date["month"] + "/" + date["year"]
 >> date["hour"] + ":" + date["min"] + ":" + date["sec"]
 ```
+
+## std/file
+
+```npl
+use std/file
+```
+
+| Function | Description | Example |
+|---|---|---|
+| `read(path)` | read entire file content | `read("test.txt")` |
+| `write(path, content)` | overwrite file content | `write("a.txt", "hello")` |
+| `file_exists(path)` | check if file exists | `file_exists("a.txt")` |
+| `delete(path)` | delete file | `delete("a.txt")` |
+| `append(path, content)` | append content to file | `append("log.txt", "hello")` |
+
+### Examples
+
+```npl
+use std/file
+
+# Write
+write("hello.txt", "Hello world")
+
+# Read
+content = read("hello.txt")
+>> content
+
+# Append
+append("hello.txt", "\nSecond line")
+
+# Exists
+>> file_exists("hello.txt")
+
+# Delete
+delete("hello.txt")
+```
+
+---
+
+## std/dir
+
+```npl
+use std/dir
+```
+
+| Function | Description | Example |
+|---|---|---|
+| `list(path)` | list files/directories | `list(".")` |
+| `dir_exists(path)` | check if directory exists | `dir_exists("src")` |
+| `create(path)` | create directory | `create("build")` |
+
+### Examples
+
+```npl
+use std/dir
+
+# Create folder
+create("data")
+
+# Check existence
+>> dir_exists("data")
+
+# List files
+files = list(".")
+>> files
+```

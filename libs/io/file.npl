@@ -1,0 +1,5 @@
+fn read(path)  -> << file_read(path)
+fn write(path, content) -> << file_write(path, content)
+fn file_exists(path) -> << file_exists(path)
+fn delete(path) -> << file_delete(path)
+fn append(path, content) -> << file_append(path, content)

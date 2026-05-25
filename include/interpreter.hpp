@@ -96,7 +96,7 @@ struct Value
     }
 };
 
-// quand il y a un return,  -> exeption -> transporte la value 
+// quand il y a un return,  -> exeption -> transporte la value
 struct ReturnException {
     Value value;
 };
@@ -146,7 +146,7 @@ private:
                 return;
             }
             if(scopes_[i].count("__fn_boundary__")) {
-                scopes_[i][name] = val; 
+                scopes_[i][name] = val;
                 return;
             }
         }
@@ -224,11 +224,11 @@ private:
 
             if(container.type == Value::Type::Array) {
                 size_t i = (idx.type == Value::Type::Number) ? (size_t)idx.num : (size_t)std::stod(idx.str);
-                
+
                 if(i >= container.arr.size()) throw std::runtime_error("Index tableau hors limites : " + std::to_string(i));
                 return container.arr[i];
             }
-            
+
             if(container.type == Value::Type::Map) {
                 if(idx.type != Value::Type::String) {
                     idx = Value::from_str(idx.to_display());
@@ -237,7 +237,7 @@ private:
                 if(it == container.map.end()) throw std::runtime_error("Clé introuvable dans la map : " + idx.str);
                 return it->second;
             }
-            
+
             throw std::runtime_error("L'objet '" + n->name + "' n'est ni un tableau ni une map");
         }
 
@@ -315,7 +315,7 @@ private:
             if (n->op == "!=") return Value::from_bool(l.flag != r.flag);
         }
 
-        throw std::runtime_error("Type Mismatch : Impossible d'utiliser l'opérateur '" + 
+        throw std::runtime_error("Type Mismatch : Impossible d'utiliser l'opérateur '" +
                                 n->op + "' entre " + l.to_display() + " et " + r.to_display());
     }
 
@@ -395,30 +395,30 @@ private:
         if(it == funcs_.end()) throw std::runtime_error("Fonction inconnue : " + node->name);
 
         FuncDef* func = it->second;
-        if(node->args.size() != func->params.size()) 
+        if(node->args.size() != func->params.size())
             throw std::runtime_error("Nombre d'arguments incorrect pour : " + node->name);
 
         std::vector<Value> arg_vals;
-        for(size_t i = 0; i < func->params.size(); i++) 
+        for(size_t i = 0; i < func->params.size(); i++)
             arg_vals.push_back(eval(node->args[i].get()));
 
         push_scope(); // créer un nouvel étage de variables
         ScopeGuard guard{scopes_};
         def_var("__fn_boundary__", Value::from_bool(true)); // dire ici commence une fonction
 
-        for(size_t i = 0; i < func->params.size(); i++) 
+        for(size_t i = 0; i < func->params.size(); i++)
             def_var(func->params[i], arg_vals[i]);
 
-        Value result = Value::null(); 
+        Value result = Value::null();
         try {
             execute(func->body.get()); // lancer le code
         } catch(ReturnException& ret) {
             result = ret.value;        // attrape le résultat du return
         }
 
-        
 
-        return result; 
+
+        return result;
     }
 
     void exec_input(InputStmt* node) {
@@ -434,7 +434,7 @@ private:
             return; // évite les overflow dues aux utilisation du meme fichier
         }
         loaded_libs_.insert(node->lib);
-        
+
         std::string path = "/usr/local/lib/npl/" + node->lib + ".npl";
         std::ifstream file(path);
         if(!file.is_open()) throw std::runtime_error("Lib introuvable : " + node->lib);

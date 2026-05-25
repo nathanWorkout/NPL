@@ -11,6 +11,10 @@
 #include "ast.hpp"
 // #include "codegen.hpp"
 #include "interpreter.hpp"
+#include <filesystem>
+#include <cstdio>       // pour std::remove
+
+namespace fs = std::filesystem;
 
 int main(int argc, char* argv[])
 {
@@ -211,6 +215,59 @@ int main(int argc, char* argv[])
         result["month"]   = Value::from_num(tm->tm_mon + 1);
         result["year"]    = Value::from_num(tm->tm_year + 1900);
         return Value::from_map(result);
+    });
+
+    interp.register_native("file_read", [](std::vector<Value> args) {
+        // Ouvre un fichier en lecture, lit tout le contenu, le retourne en string
+        std::ifstream f(args[0].str);
+        if(!f.is_open()) throw std::runtime_error("file_read: impossible d'ouvrir " + args[0].str);
+        std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+        return Value::from_str(content);
+    });
+
+    interp.register_native("file_write", [](std::vector<Value> args) {
+        // Ouvre un fichier en écriture 
+        std::ofstream f(args[0].str);
+        if(!f.is_open()) return Value::from_bool(false);
+        f << args[1].str;
+        return Value::from_bool(true);
+    });
+
+    interp.register_native("file_exists", [](std::vector<Value> args) {
+        std::ifstream f(args[0].str);
+        return Value::from_bool(f.good());
+    });
+
+    interp.register_native("file_delete", [](std::vector<Value> args) {
+        return Value::from_bool(std::remove(args[0].str.c_str()) == 0);
+    });
+
+    interp.register_native("file_append", [](std::vector<Value> args) {
+        std::ofstream f(args[0].str, std::ios::app);
+        if(!f.is_open()) return Value::from_bool(false);
+        f << args[1].str;
+        return Value::from_bool(true);
+    });
+
+    interp.register_native("dir_list", [](std::vector<Value> args) {
+        // retourne un tableau avec tous les chemins du dossier
+        std::vector<Value> result;
+        try {
+            for(const auto& entry : fs::directory_iterator(args[0].str)) {
+                result.push_back(Value::from_str(entry.path().string()));
+            }
+        } catch(...) {
+            throw std::runtime_error("dir_list: impossible de lire " + args[0].str);
+        }
+        return Value::from_arr(result);
+    });
+
+    interp.register_native("dir_exists", [](std::vector<Value> args) {
+        return Value::from_bool(fs::is_directory(args[0].str));
+    });
+
+    interp.register_native("dir_create", [](std::vector<Value> args) {
+        return Value::from_bool(fs::create_directory(args[0].str));
     });
 
     interp.run(ast.get());
