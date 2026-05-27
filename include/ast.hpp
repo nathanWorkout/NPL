@@ -134,4 +134,7 @@ struct ExprStatement : ASTNode {
     std::unique_ptr<ASTNode> expr;
 };
 
+struct BreakStmt : ASTNode {};
+struct ContinueStmt : ASTNode {};
+
 #endif

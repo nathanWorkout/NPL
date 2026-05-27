@@ -114,6 +114,9 @@ struct ReturnException {
     Value value;
 };
 
+struct BreakException {};
+struct ContinueException {};
+
 // scope : espace entre 2 {}
 // pop_back supprime les variables locales créer dans le bloc
 struct ScopeGuard {
@@ -200,6 +203,8 @@ private:
             throw std::runtime_error(eval(n->value.get()).to_display());
         }
         else if(auto n = dynamic_cast<ExprStatement*>(node)) eval(n->expr.get());
+        else if(auto n = dynamic_cast<BreakStmt*>(node)) throw BreakException();
+        else if(auto n = dynamic_cast<ContinueStmt*>(node)) throw ContinueException();
     }
 
     Value eval(ASTNode* node)
@@ -343,7 +348,8 @@ private:
     }
 
     void exec_assign(Assign* node) {
-        set_var(node->name, eval(node->value.get()));
+        Value val = eval(node->value.get());
+        set_var(node->name, val);
     }
 
     void exec_index_assign(IndexAssign* node) {
@@ -382,17 +388,39 @@ private:
         Value cv = eval(node->count.get());
         if(cv.type != Value::Type::Number) throw std::runtime_error("repeat attend un nombre");
         long long count = (long long)cv.num;
-        for(long long it = 0; it < count; it++) execute(node->body.get());
+        for(long long it = 0; it < count; it++) {
+            try {
+                execute(node->body.get());
+            } catch(BreakException&) {
+                break;
+            } catch(ContinueException&) {
+                continue;
+            }
+        }
     }
 
     void exec_while(WhileStmt* node) {
-        while(eval(node->condition.get()).truthy()) execute(node->body.get());
+        while(true) {
+            Value cond = eval(node->condition.get());
+            if (!cond.truthy()) break;
+            try {
+                execute(node->body.get());
+            } catch(BreakException&) {
+                break;
+            } catch(ContinueException&) {
+                continue;
+            }
+        }
     }
 
     void exec_for(ForStmt* node) {
         if(node->init) execute(node->init.get());
         while(!node->condition || eval(node->condition.get()).truthy()) {
-            execute(node->body.get());
+            try {
+                execute(node->body.get());
+            } catch(BreakException&) {
+                break;
+            } catch(ContinueException&) {}
             if(node->increment) execute(node->increment.get());
         }
     }

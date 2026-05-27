@@ -7,7 +7,7 @@
 
 std::vector<std::string> keywords =
 {
-    "if", "elif", "else", "while", "for", "repeat", "try", "catch", "throw", "use",
+    "if", "elif", "else", "while", "for", "repeat", "try", "catch", "throw", "use", "continue", "break"
 };
 
 std::vector<std::string> operators =

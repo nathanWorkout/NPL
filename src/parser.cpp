@@ -58,6 +58,16 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
 {
     if(at_end()) return nullptr;
 
+    if(peek().value == "break") {
+        consume();
+        return std::make_unique<BreakStmt>();
+    }
+    if(peek().value == "continue") {
+        consume();
+        return std::make_unique<ContinueStmt>();
+    }
+    if(peek().value == "fn") return parse_funcdef();
+
     if(peek().value == "fn") return parse_funcdef();
     if(peek().type == TokenType::IDENTIFIER)
     {
