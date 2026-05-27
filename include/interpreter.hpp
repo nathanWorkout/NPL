@@ -14,12 +14,24 @@
 
 struct Value
 {
-    enum class Type { Number, String, Bool, Array, Map, Null } type = Type::Null;
+    enum class Type { Number, String, Bool, Array, Map, Null, Function } type = Type::Null;
     double num  = 0.0;
     std::string str;
     bool flag = false;
     std::vector<Value> arr;
     std::unordered_map<std::string, Value> map;
+
+    // permettre l'appel de focntion dans les arguments des fonctions
+    struct {
+        FuncDef* func;   // pour les fonctions utilisateur
+    } fn;
+
+    static Value from_func(FuncDef* f) {
+        Value v;
+        v.type = Type::Function;
+        v.fn.func = f;
+        return v;
+    }
 
     // réserve une boîte pour le type et r...=v est la valeure qu'on met dedans
     static Value from_num (double v) { Value r; r.type=Type::Number; r.num=v; return r; }
@@ -37,6 +49,7 @@ struct Value
             case Type::Bool:   return flag;
             case Type::Array:  return !arr.empty();
             case Type::Map:    return !map.empty();
+            case Type::Function: return "function";
             case Type::Null:   return false;
         }
         return false;
@@ -145,12 +158,8 @@ private:
                 scopes_[i][name] = val;
                 return;
             }
-            if(scopes_[i].count("__fn_boundary__")) {
-                scopes_[i][name] = val;
-                return;
-            }
         }
-        scopes_.back()[name] = val; // si elle n'existe pas on la créer en local
+        scopes_.back()[name] = val;
     }
 
     void def_var(const std::string& name, Value val) {
@@ -203,7 +212,17 @@ private:
 
         if(auto n = dynamic_cast<BoolLit*>(node)) return Value::from_bool(n->value);
 
-        if(auto n = dynamic_cast<Identifier*>(node)) return get_var(n->name);
+        if(auto n = dynamic_cast<Identifier*>(node)) {
+            try {
+                return get_var(n->name);
+            } catch(std::runtime_error&) {
+                // Si la variable n'existe pas, regarde si une fonction du même nom est deja définie
+                auto it = funcs_.find(n->name);
+                if(it != funcs_.end())
+                    return Value::from_func(it->second);
+                throw; // met l'erreur variable inconnue
+            }
+        }
 
         // pour créer un tableau :créer une Value de type array, boucle sur chaques élements contenu entre crochets
         if(auto n = dynamic_cast<ArrayLit*>(node)) {
@@ -380,9 +399,38 @@ private:
 
    void exec_funcdef(FuncDef* node) {
         funcs_[node->name] = node;
+        def_var(node->name, Value::from_func(node));// créer une variable du nom de la fonction qui contient la fonction
     }
 
     Value exec_funccall(FuncCall* node) {
+        // Vérifie si c'est une variable de type fonction
+        try {
+            Value var = get_var(node->name);
+            if(var.type == Value::Type::Function) {
+                std::vector<Value> args;
+                for(auto& a : node->args) args.push_back(eval(a.get()));
+                FuncDef* f = var.fn.func;
+                if(args.size() != f->params.size())
+                    throw std::runtime_error("Nombre d'arguments incorrect pour " + node->name);
+                push_scope();
+                ScopeGuard guard{scopes_};
+                def_var("__fn_boundary__", Value::from_bool(true));
+                for(size_t i = 0; i < f->params.size(); i++)
+                    def_var(f->params[i], args[i]);
+                Value result = Value::null();
+                try {
+                    execute(f->body.get());
+                } catch(ReturnException& ret) {
+                    result = ret.value;
+                }
+                return result;
+            }
+        } catch(ReturnException&) {
+            throw;
+        } catch(std::runtime_error&) {
+            // variable pas trouvée ou pas une Function -> continuer vers les fonctions natives_
+        }
+
         auto nat = natives_.find(node->name); // ffi c++
         if(nat != natives_.end()) {
             std::vector<Value> args;
@@ -399,15 +447,17 @@ private:
             throw std::runtime_error("Nombre d'arguments incorrect pour : " + node->name);
 
         std::vector<Value> arg_vals;
-        for(size_t i = 0; i < func->params.size(); i++)
+        for(size_t i = 0; i < func->params.size(); i++) {
             arg_vals.push_back(eval(node->args[i].get()));
+        }
 
         push_scope(); // créer un nouvel étage de variables
         ScopeGuard guard{scopes_};
         def_var("__fn_boundary__", Value::from_bool(true)); // dire ici commence une fonction
 
-        for(size_t i = 0; i < func->params.size(); i++)
+        for(size_t i = 0; i < func->params.size(); i++) {
             def_var(func->params[i], arg_vals[i]);
+        }
 
         Value result = Value::null();
         try {
@@ -496,6 +546,7 @@ private:
         }
 
         if(auto call = dynamic_cast<FuncCall*>(n->rhs.get())) {
+
             if(call->name == "filter") {
                 auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
                 if(!lambda) throw std::runtime_error("filter attend un bloc { }");
@@ -526,6 +577,67 @@ private:
                     result.push_back(val);
                 }
                 return Value::from_arr(result);
+            }
+
+            // récupère le nom de la fonciton
+            // stocke les arguments
+            // met la valeur de gauche en 1er arg
+            std::string func_name = call->name;
+            std::vector<Value> args_values;
+            args_values.push_back(left);
+
+            for(auto& arg : call->args) {
+                args_values.push_back(eval(arg.get()));
+            }
+
+            // Vérifie si c'eest une variable de type fonction
+            try {
+                Value var = get_var(call->name);
+                if (var.type == Value::Type::Function) {
+                    FuncDef* f = var.fn.func;
+                    if (args_values.size() != f->params.size())
+                        throw std::runtime_error("Nombre d'arguments incorrect pour " + call->name);
+                    push_scope();
+                    ScopeGuard guard{scopes_};
+                    def_var("__fn_boundary__", Value::from_bool(true));
+                    for (size_t i = 0; i < f->params.size(); i++)
+                        def_var(f->params[i], args_values[i]);
+                    Value result = Value::null();
+                    try {
+                        execute(f->body.get());
+                    } catch (ReturnException& ret) {
+                        result = ret.value;
+                    }
+                    return result;
+                }
+            } catch(...) {}
+
+            auto nat = natives_.find(func_name);
+            auto it = funcs_.find(func_name);
+
+            // cherche fonction native ou fonction utilisateur
+            if(nat != natives_.end()) {
+                return nat->second(args_values);
+            } else if(it != funcs_.end()) {
+                FuncDef* func = it->second;
+                if(args_values.size() == func->params.size()) {
+                    push_scope();
+                    ScopeGuard guard{scopes_};
+                    def_var("__fn_boundary__", Value::from_bool(true));
+
+                    for(size_t i = 0; i < func->params.size(); i++) {
+                        def_var(func->params[i], args_values[i]);
+                    }
+
+                    Value result = Value::null();
+                    try {
+                        execute(func->body.get());
+                    } catch(ReturnException& ret) {
+                        result = ret.value;
+                    }
+
+                    return result;
+                }
             }
         }
 

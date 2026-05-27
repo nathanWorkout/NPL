@@ -1,0 +1,33 @@
+use std/string
+use std/array
+
+raw = "GET /index.html HTTP/1.1\r\nHost: localhost\r\n\r\n"
+lines = split(raw, "\r\n")
+>> lines
+
+request_line = lines[0]
+parts = split(request_line, " ")
+method = parts[0]
+path = parts[1]
+version = parts[2]
+>> method
+>> path
+>> version
+
+headers = {}
+i = 1
+while i < len(lines) && lines[i] != "" -> {
+    parts = split(lines[i], ": ")
+    headers[parts[0]] = parts[1]
+    i++
+}
+>> headers
+
+i++
+body = ""
+while i < array_length(lines) -> {
+    body = body + lines[i]
+    i++
+}
+>> body
+

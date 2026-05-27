@@ -68,12 +68,13 @@ std::vector<Token> tokenize(const std::string& src)
                     char esc = src[++i];
                     if(esc == 'n')  value += '\n';
                     else if(esc == 't') value += '\t';
+                    else if(esc == 'r') value += '\r';
                     else value += esc;
                 }
                 else value += src[i];
                 i++;
             }
-            i++; 
+            i++;
             tokens.push_back({TokenType::STRING, value});
             continue;
         }
@@ -89,12 +90,13 @@ std::vector<Token> tokenize(const std::string& src)
                     char esc = src[++i];
                     if(esc == 'n')  value += '\n';
                     else if(esc == 't') value += '\t';
+                    else if(esc == 'r') value += '\r';
                     else value += esc;
                 }
                 else value += src[i];
                 i++;
             }
-            i++; 
+            i++;
             tokens.push_back({TokenType::STRING, value});
             continue;
         }

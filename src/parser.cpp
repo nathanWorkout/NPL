@@ -24,9 +24,10 @@ void Parser::expect_arrow()
     consume(); // ->
 }
 
+
 std::unique_ptr<ASTNode> Parser::parse_body()
 {
-    expect_arrow(); 
+    expect_arrow();
 
     if(!at_end() && peek().type == TokenType::PUNCTUATOR && peek().value == "{")
     {
@@ -60,6 +61,28 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
     if(peek().value == "fn") return parse_funcdef();
     if(peek().type == TokenType::IDENTIFIER)
     {
+        // Regarder si après un éventuel appel de fonction on trouve un "|"
+        size_t lookahead = i+1;
+        int paren_count = 0;
+        bool has_pipe = false;
+        while (lookahead < tokens_.size()) {
+            if (tokens_[lookahead].value == "(") paren_count++;
+            else if (tokens_[lookahead].value == ")") {
+                if (paren_count == 0) break;
+                paren_count--;
+            }
+            else if (paren_count == 0 && tokens_[lookahead].value == "|") {
+                has_pipe = true;
+                break;
+            }
+            lookahead++;
+        }
+        if (has_pipe) {
+            auto node = std::make_unique<ExprStatement>();
+            node->expr = parse_pipeline();
+            return node;
+        }
+        // Sinon traitement normal
         if(i+1 < tokens_.size() && tokens_[i+1].value == "(") return parse_funccall();
         if(i+1 < tokens_.size() && tokens_[i+1].value == "|") {
             auto node = std::make_unique<ExprStatement>();
@@ -71,18 +94,25 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
     if(peek().type == TokenType::OUTPUT) return parse_output();
     if(peek().type == TokenType::RETURN_TOK) return parse_return();
     if(peek().value == "if") return parse_if();
-    
-    if(peek().value == "elif" || peek().value == "else") { 
-        consume(); 
-        return nullptr; 
+
+    if(peek().value == "elif" || peek().value == "else") {
+        consume();
+        return nullptr;
     }
-    
+
     if(peek().value == "repeat") return parse_repeat();
     if(peek().value == "while") return parse_while();
     if(peek().value == "for") return parse_for();
     if(peek().value == "use") return parse_use();
     if(peek().value == "try") return parse_try();
     if(peek().value == "throw") return parse_throw();
+
+    auto expr = parse_pipeline();
+    if (expr) {
+        auto node = std::make_unique<ExprStatement>();
+        node->expr = std::move(expr);
+        return node;
+    }
 
     consume();
     return nullptr;
@@ -178,7 +208,21 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
     else if(peek().type == TokenType::NULL_TOK)
     {
         consume();
-        return std::make_unique<NullLit>();  
+        return std::make_unique<NullLit>();
+    }
+
+    else if(peek().value == "fn") {
+        auto lambda = std::make_unique<FuncDef>();
+        lambda->name = ""; // anonyme
+        consume();
+        consume();
+        while(!at_end() && peek().value != ")") {
+            lambda->params.push_back(consume().value);
+            if(!at_end() && peek().value == ",") consume();
+        }
+        consume();
+        lambda->body = parse_body(); // utilise parse_body -> { ... } ou -> expr
+        return lambda;
     }
 
     return nullptr;
@@ -186,15 +230,15 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
 
 std::unique_ptr<ASTNode> Parser::parse_term()
 {
-    auto left = parse_unary(); 
+    auto left = parse_unary();
 
-    while(!at_end() && peek().type == TokenType::OPERATOR && 
+    while(!at_end() && peek().type == TokenType::OPERATOR &&
          (peek().value == "*" || peek().value == "/" || peek().value == "%"))
     {
         auto binop = std::make_unique<BinOp>();
         binop->lhs = std::move(left);
         binop->op  = consume().value;
-        binop->rhs = parse_unary(); 
+        binop->rhs = parse_unary();
         left = std::move(binop);
     }
     return left;
@@ -204,7 +248,7 @@ std::unique_ptr<ASTNode> Parser::parse_expr()
 {
     auto left = parse_term();
 
-    while(!at_end() && peek().type == TokenType::OPERATOR && 
+    while(!at_end() && peek().type == TokenType::OPERATOR &&
          (peek().value == "+" || peek().value == "-"))
     {
         auto binop = std::make_unique<BinOp>();
@@ -235,10 +279,10 @@ std::unique_ptr<ASTNode> Parser::parse_cond()
 std::unique_ptr<ASTNode> Parser::parse_comparison()
 {
     auto left = parse_expr();
-    if(!at_end() && peek().type == TokenType::OPERATOR && 
-       peek().value != "->" && peek().value != ">>" && 
+    if(!at_end() && peek().type == TokenType::OPERATOR &&
+       peek().value != "->" && peek().value != ">>" &&
        peek().value != "&&" && peek().value != "||" &&
-       peek().value != "|") 
+       peek().value != "|")
     {
         auto binop = std::make_unique<BinOp>();
         binop->lhs = std::move(left);
@@ -252,14 +296,14 @@ std::unique_ptr<ASTNode> Parser::parse_comparison()
 
 std::unique_ptr<ASTNode> Parser::parse_assign()
 {
-    std::string name = consume().value; 
+    std::string name = consume().value;
 
     if(!at_end() && peek().value == "[")
     {
         consume();
         auto idx = parse_expr();
         consume();
-        if(peek().value == "=") consume(); 
+        if(peek().value == "=") consume();
         auto node = std::make_unique<IndexAssign>();
         node->name = name;
         node->index = std::move(idx);
@@ -283,7 +327,7 @@ std::unique_ptr<ASTNode> Parser::parse_assign()
     }
 
     if(!at_end() && peek().value == "=") {
-        consume(); 
+        consume();
     }
 
     if(!at_end() && peek().type == TokenType::INPUT)
@@ -298,13 +342,13 @@ std::unique_ptr<ASTNode> Parser::parse_assign()
 
     auto node  = std::make_unique<Assign>();
     node->name = name;
-    node->value = parse_pipeline(); 
+    node->value = parse_pipeline();
     return node;
 }
 
 std::unique_ptr<ASTNode> Parser::parse_output()
 {
-    consume(); 
+    consume();
     auto node = std::make_unique<Output>();
     node->value = parse_pipeline();
     return node;
@@ -376,8 +420,25 @@ std::unique_ptr<ASTNode> Parser::parse_funcdef()
         if(!at_end() && peek().value == ",") consume();
     }
     consume();
-    node->body = parse_body();
-    return node;
+    auto raw_body = parse_body();
+
+    // Si le corps est une expression sans {} on le met dans un return
+    if (auto es = dynamic_cast<ExprStatement*>(raw_body.get())) {
+            auto block = std::make_unique<Block>();
+            auto ret   = std::make_unique<ReturnStmt>();
+            ret->value = std::move(es->expr);
+            block->statements.push_back(std::move(ret));
+            node->body = std::move(block);
+        } else if (auto fc = dynamic_cast<FuncCall*>(raw_body.get())) {
+            auto block = std::make_unique<Block>();
+            auto ret   = std::make_unique<ReturnStmt>();
+            ret->value = std::move(raw_body);
+            block->statements.push_back(std::move(ret));
+            node->body = std::move(block);
+        } else {
+            node->body = std::move(raw_body);
+        }
+        return node;
 }
 
 std::unique_ptr<ASTNode> Parser::parse_funccall()
@@ -419,13 +480,13 @@ std::unique_ptr<ASTNode> Parser::parse_try()
     consume();
     auto node = std::make_unique<TryStmt>();
     node->body = parse_body();
-    
+
     if(at_end() || peek().value != "catch")
         throw std::runtime_error("try sans catch");
-    consume(); 
-    
+    consume();
+
     node->error_var = consume().value;
-    
+
     node->catch_body = parse_body();
     return node;
 }
@@ -448,7 +509,7 @@ std::unique_ptr<ASTNode> Parser::parse_unary()
         zero->value = 0.0;
         node->op = "-";
         node->lhs = std::move(zero);
-        node->rhs = parse_unary(); 
+        node->rhs = parse_unary();
         return node;
     }
     return parse_primary();
@@ -472,29 +533,36 @@ std::unique_ptr<ASTNode> Parser::parse_pipeline()
             auto blk = std::make_unique<Block>();
             while(!at_end() && peek().value != "}")
                 blk->statements.push_back(parse_statement());
-            consume(); 
+            consume();
             lambda->body = std::move(blk);
             pipe->rhs = std::move(lambda);
         }
         else if(peek().type == TokenType::IDENTIFIER)
         {
-            std::string fname = consume().value;
-            auto call = std::make_unique<FuncCall>();
-            call->name = fname;
+            // Si le prochian token est (
+            if (i+1 < tokens_.size() && tokens_[i+1].value == "(") {
+                // Appel de fonction normal avec parenthèses
+                auto call = parse_funccall();
+                pipe->rhs = std::move(call);
+            } else {
+                // Pas de parenthèses :
+                std::string fname = consume().value;
+                auto call = std::make_unique<FuncCall>();
+                call->name = fname;
 
-            if(!at_end() && peek().value == "{")
-            {
-                consume();
-                auto lambda = std::make_unique<LambdaBlock>();
-                auto blk = std::make_unique<Block>();
-                while(!at_end() && peek().value != "}")
-                    blk->statements.push_back(parse_statement());
-                consume();
-                lambda->body = std::move(blk);
-                call->args.push_back(std::move(lambda));
+                // Vérifier si un lambda (ex filter)
+                if(!at_end() && peek().value == "{") {
+                    consume();
+                    auto lambda = std::make_unique<LambdaBlock>();
+                    auto blk = std::make_unique<Block>();
+                    while(!at_end() && peek().value != "}")
+                        blk->statements.push_back(parse_statement());
+                    consume();
+                    lambda->body = std::move(blk);
+                    call->args.push_back(std::move(lambda));
+                }
+                pipe->rhs = std::move(call);
             }
-
-            pipe->rhs = std::move(call);
         }
         else if(peek().type == TokenType::OUTPUT)
         {

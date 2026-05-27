@@ -1,0 +1,23 @@
+fn listen(port) -> tcp_listen(port)
+fn accept(srv) -> tcp_accept(srv)
+fn read(fd) -> tcp_read(fd)
+fn write(fd, data) -> tcp_write(fd, data)
+fn close(fd) -> tcp_close(fd)
+
+fn serve(port, handler) -> {
+    srv = listen(port)
+    if srv < 0 -> {
+        >> "Erreur: impossible d'écouter port " + port
+        << false
+    }
+    >> "Serveur NPL sur http://localhost:" + port
+    while true -> {
+        client = accept(srv)
+        if client >= 0 -> {
+            req = read(client)
+            res = handler(client, req)
+            write(client, res)
+            close(client)
+        }
+    }
+}

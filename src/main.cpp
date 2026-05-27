@@ -6,13 +6,17 @@
 #include <unistd.h>
 #include <sys/syscall.h>
 #include <ctime>
+#include <filesystem>
+#include <cstdio>
+#include <cstring>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "ast.hpp"
-// #include "codegen.hpp"
 #include "interpreter.hpp"
-#include <filesystem>
-#include <cstdio>       // pour std::remove
 
 namespace fs = std::filesystem;
 
@@ -194,14 +198,17 @@ int main(int argc, char* argv[])
         return Value::from_str(args[0].to_display());
     });
 
-    interp.register_native("time_now", [](std::vector<Value> args) {
+    interp.register_native("time_map", [](std::vector<Value> args) {
         time_t t = time(nullptr);
         struct tm* tm = localtime(&t);
-        char buf[32];
-        snprintf(buf, sizeof(buf), "%02d/%02d/%04d %02d:%02d:%02d",
-            tm->tm_mday, tm->tm_mon + 1, tm->tm_year + 1900,
-            tm->tm_hour, tm->tm_min, tm->tm_sec);
-        return Value::from_str(buf);
+        std::unordered_map<std::string, Value> result;
+        result["seconds"] = Value::from_num(tm->tm_sec);
+        result["minutes"] = Value::from_num(tm->tm_min);
+        result["hours"]   = Value::from_num(tm->tm_hour);
+        result["day"]     = Value::from_num(tm->tm_mday);
+        result["month"]   = Value::from_num(tm->tm_mon + 1);
+        result["year"]    = Value::from_num(tm->tm_year + 1900);
+        return Value::from_map(result);
     });
 
     interp.register_native("time_parts", [](std::vector<Value> args) {
@@ -226,7 +233,7 @@ int main(int argc, char* argv[])
     });
 
     interp.register_native("file_write", [](std::vector<Value> args) {
-        // Ouvre un fichier en écriture 
+        // Ouvre un fichier en écriture
         std::ofstream f(args[0].str);
         if(!f.is_open()) return Value::from_bool(false);
         f << args[1].str;
@@ -269,6 +276,66 @@ int main(int argc, char* argv[])
     interp.register_native("dir_create", [](std::vector<Value> args) {
         return Value::from_bool(fs::create_directory(args[0].str));
     });
+
+    //================================================================
+    //                      BACKEND (SERVEURS)
+    //================================================================
+
+    // TCP
+    interp.register_native("tcp_listen", [](std::vector<Value> args) {
+        int port = (int)args[0].num;
+        int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (server_fd < 0) return Value::from_num(-1);
+
+        int opt = 1;
+        setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_addr.s_addr = INADDR_ANY;
+        addr.sin_port = htons(port);
+
+        if (bind(server_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+            close(server_fd);
+            return Value::from_num(-1);
+        }
+        if (listen(server_fd, 10) < 0) {
+            close(server_fd);
+            return Value::from_num(-1);
+        }
+        return Value::from_num(server_fd);
+    });
+
+    interp.register_native("tcp_accept", [](std::vector<Value> args) {
+        int server_fd = (int)args[0].num;
+        int client_fd = accept(server_fd, nullptr, nullptr);
+        return Value::from_num(client_fd);
+    });
+
+    interp.register_native("tcp_read", [](std::vector<Value> args) {
+        int fd = (int)args[0].num;
+        char buffer[8192];
+        ssize_t n = read(fd, buffer, sizeof(buffer) - 1);
+        if (n <= 0) return Value::from_str("");
+        buffer[n] = '\0';
+        return Value::from_str(std::string(buffer));
+    });
+
+    interp.register_native("tcp_write", [](std::vector<Value> args) {
+        int fd = (int)args[0].num;
+        std::string data = args[1].str;
+        ssize_t n = write(fd, data.c_str(), data.size());
+        return Value::from_bool(n == (ssize_t)data.size());
+    });
+
+    interp.register_native("tcp_close", [](std::vector<Value> args) {
+        int fd = (int)args[0].num;
+        shutdown(fd, SHUT_WR);  // fin apès avoir vidé les buffers
+        close(fd);
+        return Value::null();
+    });
+
 
     interp.run(ast.get());
 
