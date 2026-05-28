@@ -13,6 +13,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <sys/stat.h>
+#include <ncurses.h>
 
 #include "lexer.hpp"
 #include "parser.hpp"
@@ -332,6 +333,109 @@ int main(int argc, char* argv[])
         }
     });
 
+    //================================================================
+    //                      TUI (ncurse)
+    //================================================================
+    static int current_color = 0;
+    static int current_style = 0;
+
+    interp.register_native("curses_init", [](std::vector<Value> args) {
+        initscr();
+        cbreak();
+        noecho();
+        keypad(stdscr, TRUE);
+        start_color();
+
+        // Initialise les paires de couleurs de base
+        init_pair(1, COLOR_RED, COLOR_BLACK);
+        init_pair(2, COLOR_GREEN, COLOR_BLACK);
+        init_pair(3, COLOR_YELLOW, COLOR_BLACK);
+        init_pair(4, COLOR_BLUE, COLOR_BLACK);
+        init_pair(5, COLOR_MAGENTA, COLOR_BLACK);
+        init_pair(6, COLOR_CYAN, COLOR_BLACK);
+        init_pair(7, COLOR_WHITE, COLOR_BLACK);
+
+        // Texte noir sur fond coloré
+        init_pair(10, COLOR_BLACK, COLOR_RED);
+        init_pair(11, COLOR_BLACK, COLOR_GREEN);
+        init_pair(12, COLOR_BLACK, COLOR_YELLOW);
+        init_pair(13, COLOR_BLACK, COLOR_BLUE);
+        init_pair(14, COLOR_BLACK, COLOR_MAGENTA);
+        init_pair(15, COLOR_BLACK, COLOR_CYAN);
+        init_pair(16, COLOR_BLACK, COLOR_WHITE);
+
+        return Value::null();
+    });
+
+    interp.register_native("curses_end", [](std::vector<Value> args) {
+        endwin();
+        return Value::null();
+    });
+
+    interp.register_native("curses_clear", [](std::vector<Value> args) {
+        clear();
+        return Value::null();
+    });
+
+    interp.register_native("curses_refresh", [](std::vector<Value> args) {
+        refresh();
+        return Value::null();
+    });
+
+    interp.register_native("curses_move", [](std::vector<Value> args) {
+        move((int)args[0].num, (int)args[1].num);
+        return Value::null();
+    });
+
+    interp.register_native("curses_print", [](std::vector<Value> args) {
+        printw(args[0].str.c_str());
+        return Value::null();
+    });
+
+    interp.register_native("curses_getch", [](std::vector<Value> args) {
+        return Value::from_num(getch());
+    });
+
+    interp.register_native("curses_set_color", [](std::vector<Value> args) {
+        int color = (int)args[0].num;
+        int style = args.size() > 1 ? (int)args[1].num : 0;
+
+        current_color = color;
+        current_style = style;
+
+        // Applique les styles
+        if(style & 1) attron(A_BOLD);
+        if(style & 2) attron(A_UNDERLINE);
+        if(style & 4) attron(A_REVERSE);
+        if(style & 8) attron(A_BLINK);
+        if(style & 16) attron(A_DIM);
+
+        // Applique la couleur
+        if(color > 0) {
+            attron(COLOR_PAIR(color));
+        }
+
+        return Value::null();
+    });
+
+    interp.register_native("curses_reset", [](std::vector<Value> args) {
+        // Enlève les styles
+        if(current_style & 1) attroff(A_BOLD);
+        if(current_style & 2) attroff(A_UNDERLINE);
+        if(current_style & 4) attroff(A_REVERSE);
+        if(current_style & 8) attroff(A_BLINK);
+        if(current_style & 16) attroff(A_DIM);
+
+        // Enlève la couleur
+        if(current_color > 0) {
+            attroff(COLOR_PAIR(current_color));
+        }
+
+        current_color = 0;
+        current_style = 0;
+
+        return Value::null();
+    });
     //================================================================
     //                      BACKEND (SERVEURS)
     //================================================================

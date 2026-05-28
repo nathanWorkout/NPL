@@ -10,16 +10,18 @@ TARGET   := npl
 SRCS := $(wildcard $(SRCDIR)/*.cpp)
 OBJS := $(patsubst $(SRCDIR)/%.cpp, $(BUILDDIR)/%.o, $(SRCS))
 
+LIBS = -lncurses
+
 .PHONY: all debug clean re run
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CXX) $(CXXFLAGS) $(RELFLAGS) -o $@ $^
+	$(CXX) $(CXXFLAGS) $(RELFLAGS) -o $@ $^ $(LIBS)
 	sudo cp $(TARGET) /usr/local/bin/$(TARGET)
 
 debug: $(OBJS)
-	$(CXX) $(CXXFLAGS) $(DBGFLAGS) -o $(TARGET)_dbg $^
+	$(CXX) $(CXXFLAGS) $(DBGFLAGS) -o $(TARGET)_dbg $^ $(LIBS)
 
 $(BUILDDIR)/%.o: $(SRCDIR)/%.cpp | $(BUILDDIR)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<

@@ -1,0 +1,263 @@
+# Couleurs de base
+black   = 0
+red     = 1
+green   = 2
+yellow  = 3
+blue    = 4
+magenta = 5
+cyan    = 6
+white   = 7
+
+# Si terminal les supporte
+gray        = 8
+bright_red  = 9
+bright_green= 10
+bright_yellow=11
+bright_blue = 12
+bright_magenta=13
+bright_cyan = 14
+bright_white= 15
+
+# Paires prédéfinies (texte, fond)
+pair_red_black   = 1
+pair_green_black = 2
+pair_yellow_black= 3
+pair_blue_black  = 4
+pair_magenta_black=5
+pair_cyan_black  = 6
+pair_white_black = 7
+
+pair_black_red   = 10
+pair_black_green = 11
+pair_black_yellow= 12
+pair_black_blue  = 13
+
+# Styles
+bold      = 1 << 0
+underline = 1 << 1
+reverse   = 1 << 2
+blink     = 1 << 3
+dim       = 1 << 4
+
+# Fonctions de base
+fn init()     -> { curses_init(); null }
+fn close()    -> { curses_end(); null }
+fn clear()    -> { curses_clear(); null }
+fn refresh()  -> { curses_refresh(); null }
+fn wait_key() -> curses_getch()
+
+# Primitives couleurs
+fn set_color(c, s) -> curses_set_color(c, s)
+fn reset() -> curses_reset()
+
+# Fonctions de texte
+fn print(text) -> curses_print(text)
+fn print_at(x, y, text) -> {
+    curses_move(y, x)
+    curses_print(text)
+}
+
+# Fonctions de couleurs
+fn print_color(text, color) -> {
+    set_color(color, 0)
+    print(text)
+    reset()
+}
+
+fn print_at_color(x, y, text, color) -> {
+    curses_move(y, x)
+    print_color(text, color)
+}
+
+# Saisir du texte
+fn input(prompt) -> {
+    print(prompt + " ")
+    refresh()
+    result = ""
+    while true -> {
+        key = wait_key()
+        if key == 10 -> break           # Entrée
+        elif key == 127 -> {            # Suppr
+            if length(result) > 0 {
+                result = slice(result, 0, -1)
+                print_at(0, 0, prompt + " " + result + " ")
+            }
+        }
+        else -> {
+            result = result + chr(key)
+            print_at(0, 0, prompt + " " + result)
+        }
+    }
+    << result
+}
+
+# Formes pré-faites
+
+# Box
+fn box(x, y, w, h) -> {
+    i = 0
+    move(y, x)
+    print("┌" + ("─" * (w-2)) + "┐")
+    while i < h-2 -> {
+        move(y + i + 1, x)
+        print("│" + (" " * (w-2)) + "│")
+        i++
+    }
+    move(y + h - 1, x)
+    print("└" + ("─" * (w-2)) + "┘")
+}
+
+# Box avec titre
+fn box_title(x, y, w, h, title) -> {
+    box(x, y, w, h)
+    move(y, x + 2)
+    print(title)
+}
+
+# Lignes
+fn line_h(x, y, length) -> {
+    move(y, x)
+    print("─" * length)
+}
+
+fn line_v(x, y, length) -> {
+    i = 0
+    while i < length -> {
+        move(y + i, x)
+        print("│")
+        i++
+    }
+}
+
+fn line_diag(x1, y1, x2, y2) -> {
+    dx = abs(x2 - x1)
+    dy = abs(y2 - y1)
+    sx = x1 < x2 ? 1 : -1
+    sy = y1 < y2 ? 1 : -1
+    err = dx - dy
+
+    x = x1
+    y = y1
+
+    while true -> {
+        move(y, x)
+        print("*")
+        if x == x2 && y == y2 -> break
+        e2 = 2 * err
+        if e2 > -dy -> { err -= dy; x += sx }
+        if e2 < dx -> { err += dx; y += sy }
+    }
+}
+
+# Rectangle plein
+fn rect(x, y, w, h) -> {
+    i = 0
+    while i < h -> {
+        move(y + i, x)
+        print("█" * w)
+        i++
+    }
+}
+
+# Bordures
+fn border_single(x, y, w, h) -> {
+    i = 0
+    move(y, x);         print("┌" + ("─" * (w-2)) + "┐")
+    while i < h-2 -> { move(y+i+1, x); print("│" + (" " * (w-2)) + "│"); i++ }
+    move(y+h-1, x);     print("└" + ("─" * (w-2)) + "┘")
+}
+
+fn border_double(x, y, w, h) -> {
+    move(y, x);         print("╔" + ("═" * (w-2)) + "╗")
+    i = 0
+    while i < h-2 -> {
+        move(y+i+1, x); print("║" + (" " * (w-2)) + "║")
+        i++
+    }
+    move(y+h-1, x);     print("╚" + ("═" * (w-2)) + "╝")
+}
+
+fn border_rounded(x, y, w, h) -> {
+    move(y, x);         print("╭" + ("─" * (w-2)) + "╮")
+    i = 0
+    while i < h-2 -> {
+        move(y+i+1, x); print("│" + (" " * (w-2)) + "│")
+        i++
+    }
+    move(y+h-1, x);     print("╰" + ("─" * (w-2)) + "╯")
+}
+
+# Barres
+fn bar_h(x, y, width, color, percent) -> {
+    filled = (width * percent) / 100
+    move(y, x)
+    set_color(color, 0)
+    print("█" * filled)
+    reset()
+    print("░" * (width - filled))
+}
+
+fn bar_v(x, y, height, color, percent) -> {
+    filled = (height * percent) / 100
+    i = 0
+    while i < height -> {
+        move(y + height - 1 - i, x)
+        if i < filled -> {
+            set_color(color, 0)
+            print("█")
+            reset()
+        }
+        else -> print("░")
+        i++
+    }
+}
+
+# Cercle
+fn circle(x, y, radius) -> {
+    r2 = radius * radius
+    x0 = -radius
+    while x0 <= radius -> {
+        y0 = -radius
+        while y0 <= radius -> {
+            if (x0*x0 + y0*y0) <= r2 -> {
+                move(y + y0, x + x0)
+                print("●")
+            }
+            y0++
+        }
+        x0++
+    }
+}
+
+# Flèches
+fn arrow_right(x, y, length) -> {
+    move(y, x)
+    print("─" * (length-1) + "▶")
+}
+
+fn arrow_left(x, y, length) -> {
+    move(y, x)
+    print("◀" + ("─" * (length-1)))
+}
+
+fn arrow_up(x, y, length) -> {
+    i = 0
+    while i < length-1 -> {
+        move(y - i, x)
+        print("│")
+        i++
+    }
+    move(y - length, x)
+    print("▲")
+}
+
+fn arrow_down(x, y, length) -> {
+    i = 0
+    while i < length-1 -> {
+        move(y + i, x)
+        print("│")
+        i++
+    }
+    move(y + length, x)
+    print("▼")
+}
