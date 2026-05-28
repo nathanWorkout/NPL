@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/stat.h>
 
 #include "lexer.hpp"
 #include "parser.hpp"
@@ -167,12 +168,13 @@ int main(int argc, char* argv[])
 
     interp.register_native("value_type", [](std::vector<Value> args) {
         switch(args[0].type) {
-            case Value::Type::Number: return Value::from_str("number");
-            case Value::Type::String: return Value::from_str("string");
-            case Value::Type::Bool:   return Value::from_str("bool");
-            case Value::Type::Array:  return Value::from_str("array");
-            case Value::Type::Map:    return Value::from_str("map");
-            case Value::Type::Null:   return Value::from_str("null");
+            case Value::Type::Number:   return Value::from_str("number");
+            case Value::Type::String:   return Value::from_str("string");
+            case Value::Type::Bool:     return Value::from_str("bool");
+            case Value::Type::Array:    return Value::from_str("array");
+            case Value::Type::Map:      return Value::from_str("map");
+            case Value::Type::Function: return Value::from_str("function");
+            case Value::Type::Null:     return Value::from_str("null");
         }
         return Value::from_str("null");
     });
@@ -224,57 +226,110 @@ int main(int argc, char* argv[])
         return Value::from_map(result);
     });
 
-    interp.register_native("file_read", [](std::vector<Value> args) {
-        // Ouvre un fichier en lecture, lit tout le contenu, le retourne en string
-        std::ifstream f(args[0].str);
-        if(!f.is_open()) throw std::runtime_error("file_read: impossible d'ouvrir " + args[0].str);
-        std::string content((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
+    interp.register_native("file_read", [](std::vector<Value> args) -> Value {
+         // Ouvre un fichier en lecture, lit tout le contenu, le retourne en string
+        if(args.empty() || args[0].str.empty()) {
+            throw std::runtime_error("file_read: chemin vide");
+        }
+
+        std::string path = args[0].str;
+        std::ifstream f(path);
+        if(!f.is_open()) {
+            throw std::runtime_error("file_read: impossible d'ouvrir " + path);
+        }
+
+        std::stringstream buffer;
+        buffer << f.rdbuf();
+        std::string content = buffer.str();
+        f.close();
+
         return Value::from_str(content);
     });
 
-    interp.register_native("file_write", [](std::vector<Value> args) {
-        // Ouvre un fichier en écriture
-        std::ofstream f(args[0].str);
+    interp.register_native("file_write", [](std::vector<Value> args) -> Value {
+        if(args.size() < 2 || args[0].str.empty()) {
+            return Value::from_bool(false);
+        }
+
+        std::string path = args[0].str;
+        std::string content = args[1].str;
+
+        std::ofstream f(path);
         if(!f.is_open()) return Value::from_bool(false);
-        f << args[1].str;
+
+        f << content;
+        f.close();
+
         return Value::from_bool(true);
     });
 
     interp.register_native("file_exists", [](std::vector<Value> args) {
-        std::ifstream f(args[0].str);
-        return Value::from_bool(f.good());
+        if(args.empty()) return Value::from_bool(false);
+        struct stat buffer;
+        return Value::from_bool(stat(args[0].str.c_str(), &buffer) == 0);
     });
 
-    interp.register_native("file_delete", [](std::vector<Value> args) {
+    interp.register_native("file_delete", [](std::vector<Value> args) -> Value {
+        if(args.empty() || args[0].str.empty()) {
+            return Value::from_bool(false);
+        }
         return Value::from_bool(std::remove(args[0].str.c_str()) == 0);
     });
 
-    interp.register_native("file_append", [](std::vector<Value> args) {
+    interp.register_native("file_append", [](std::vector<Value> args) -> Value {
+        if(args.size() < 2 || args[0].str.empty()) {
+            return Value::from_bool(false);
+        }
+
         std::ofstream f(args[0].str, std::ios::app);
         if(!f.is_open()) return Value::from_bool(false);
+
         f << args[1].str;
+        f.close();
+
         return Value::from_bool(true);
     });
 
-    interp.register_native("dir_list", [](std::vector<Value> args) {
-        // retourne un tableau avec tous les chemins du dossier
+    interp.register_native("dir_list", [](std::vector<Value> args) -> Value {
+        // retourne un tableau avec tout les chemins du dossier
+        if(args.empty() || args[0].str.empty()) {
+            return Value::from_arr({});
+        }
+
         std::vector<Value> result;
         try {
-            for(const auto& entry : fs::directory_iterator(args[0].str)) {
-                result.push_back(Value::from_str(entry.path().string()));
+            if(fs::exists(args[0].str) && fs::is_directory(args[0].str)) {
+                for(const auto& entry : fs::directory_iterator(args[0].str)) {
+                    result.push_back(Value::from_str(entry.path().string()));
+                }
             }
-        } catch(...) {
-            throw std::runtime_error("dir_list: impossible de lire " + args[0].str);
+        } catch(const std::exception& e) {
+            // Retourne tableau vide au lieu de crash
+            return Value::from_arr({});
         }
         return Value::from_arr(result);
     });
 
-    interp.register_native("dir_exists", [](std::vector<Value> args) {
-        return Value::from_bool(fs::is_directory(args[0].str));
+    interp.register_native("dir_exists", [](std::vector<Value> args) -> Value {
+        if(args.empty() || args[0].str.empty()) {
+            return Value::from_bool(false);
+        }
+        try {
+            return Value::from_bool(fs::is_directory(args[0].str));
+        } catch(...) {
+            return Value::from_bool(false);
+        }
     });
 
-    interp.register_native("dir_create", [](std::vector<Value> args) {
-        return Value::from_bool(fs::create_directory(args[0].str));
+    interp.register_native("dir_create", [](std::vector<Value> args) -> Value {
+        if(args.empty() || args[0].str.empty()) {
+            return Value::from_bool(false);
+        }
+        try {
+            return Value::from_bool(fs::create_directory(args[0].str));
+        } catch(...) {
+            return Value::from_bool(false);
+        }
     });
 
     //================================================================
@@ -333,6 +388,36 @@ int main(int argc, char* argv[])
         int fd = (int)args[0].num;
         shutdown(fd, SHUT_WR);  // fin apès avoir vidé les buffers
         close(fd);
+        return Value::null();
+    });
+
+    //=================================================================
+    //                      Router
+    // ================================================================
+    struct Route {
+        std::string method;
+        std::string path;
+        Value handler;
+    };
+
+    auto routes = std::make_shared<std::vector<Route>>();
+
+    interp.register_native("route_add", [routes](std::vector<Value> args) {
+        Route r;
+        r.method  = args[0].str;
+        r.path    = args[1].str;
+        r.handler = args[2];
+        routes->push_back(r);
+        return Value::null();
+    });
+
+    interp.register_native("route_match", [routes](std::vector<Value> args) {
+        std::string method = args[0].str;
+        std::string path   = args[1].str;
+        for(auto& r : *routes) {
+            if(r.method == method && r.path == path)
+                return r.handler;
+        }
         return Value::null();
     });
 

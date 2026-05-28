@@ -1,0 +1,23 @@
+use std/string
+
+
+fn response(status, body) -> {
+    status_text = "OK"
+    status_text = "OK"
+    if status   == 400 -> status_text = "Bad Request"
+    elif status == 401 -> status_text = "Unauthorized"
+    elif status == 403 -> status_text = "Forbidden"
+    elif status == 404 -> status_text = "Not Found"
+    elif status == 500 -> status_text = "Internal Server Error"
+    elif status == 201 -> status_text = "Created"
+
+    << "HTTP/1.1 " + status + " " + status_text + "\r\nContent-Length: " + string_length(body) + "\r\nContent-Type: text/plain\r\n\r\n" + body
+}
+
+fn json_response(status, body) -> {
+    << "HTTP/1.1 " + status + " OK\r\nContent-Type: application/json\r\nContent-Length: " + len(body) + "\r\n\r\n" + body
+}
+
+fn not_found() -> {
+    << response(404, "Not Found")
+}

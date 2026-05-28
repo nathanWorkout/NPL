@@ -49,7 +49,7 @@ struct Value
             case Type::Bool:   return flag;
             case Type::Array:  return !arr.empty();
             case Type::Map:    return !map.empty();
-            case Type::Function: return "function";
+            case Type::Function: return true;
             case Type::Null:   return false;
         }
         return false;
@@ -103,6 +103,8 @@ struct Value
                 }
                 return s + "}";
             }
+            case Type::Function: return "function";
+
             case Type::Null: return "null";
         }
         return "";
@@ -129,16 +131,20 @@ struct ScopeGuard {
 class Interpreter
 {
 public:
-    void run(ASTNode* node) {
+void run(ASTNode* node) {
         push_scope();
-
         if(auto block = dynamic_cast<Block*>(node)) {
-            for(auto& s : block->statements)
+            for(auto& s : block->statements) {
+                if(!s) continue;
                 if(auto fn = dynamic_cast<FuncDef*>(s.get()))
                     exec_funcdef(fn);
+                else
+                    execute(s.get());
+            }
+            return;
         }
         execute(node);
-}
+    }
 
     std::unordered_map<std::string, std::function<Value(std::vector<Value>)>> natives_;
     void register_native(const std::string& name, std::function<Value(std::vector<Value>)> fn)
@@ -270,6 +276,25 @@ private:
         if(auto n = dynamic_cast<NullLit*>(node)) return Value::null();
         if(auto n = dynamic_cast<PipeExpr*>(node)) return eval_pipe(n);
 
+        if(auto n = dynamic_cast<Placeholder*>(node)) {
+            return get_var("_");
+        }
+
+        if(auto n = dynamic_cast<InputExpr*>(node)) {
+            if(!n->prompt.empty()) std::cout << n->prompt;
+            std::string input;
+            std::getline(std::cin, input);
+            try { return Value::from_num(std::stod(input)); }
+            catch(...) { return Value::from_str(input); }
+        }
+
+        if(auto n = dynamic_cast<FuncDef*>(node)) {
+            if(n->name.empty())
+                return Value::from_func(n);
+            exec_funcdef(n);
+            return get_var(n->name);
+        }
+
         return Value::null();
     }
 
@@ -338,6 +363,9 @@ private:
             if (n->op == "==") return Value::from_bool(l.flag == r.flag);
             if (n->op == "!=") return Value::from_bool(l.flag != r.flag);
         }
+
+        if(n->op == "==") return Value::from_bool(false);
+        if(n->op == "!=") return Value::from_bool(true);
 
         throw std::runtime_error("Type Mismatch : Impossible d'utiliser l'opérateur '" +
                                 n->op + "' entre " + l.to_display() + " et " + r.to_display());
@@ -508,12 +536,13 @@ private:
     }
 
     void exec_use(UseStmt* node) {
-        if(loaded_libs_.count(node->lib)) {
-            return; // évite les overflow dues aux utilisation du meme fichier
-        }
-        loaded_libs_.insert(node->lib);
+        if(loaded_libs_.count(node->lib)) return; // évite les overflow dues au mutiples utilisation du fichier
 
-        std::string path = "/usr/local/lib/npl/" + node->lib + ".npl";
+        std::string lib = node->lib;
+        size_t pos;
+        while((pos = lib.find("//")) != std::string::npos) lib.replace(pos, 2, "/");
+
+        std::string path = "/usr/local/lib/npl/" + lib + ".npl";
         std::ifstream file(path);
         if(!file.is_open()) throw std::runtime_error("Lib introuvable : " + node->lib);
         std::string src((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
@@ -521,12 +550,17 @@ private:
         Parser parser(tokens); // parser
         auto ast = parser.parse(); // ast
         loaded_asts_.push_back(std::move(ast)); // mettre enn mémoire
+
         if(auto block = dynamic_cast<Block*>(loaded_asts_.back().get())) {
-            for(auto& s : block->statements)
+            for(auto& s : block->statements) {
                 if(auto fn = dynamic_cast<FuncDef*>(s.get()))
-                    exec_funcdef(fn); // enregistre les foncitons de la lib
+                    exec_funcdef(fn);
+                else if(!dynamic_cast<FuncCall*>(s.get())) // ne pas exécuter les FuncCall top-level
+                    execute(s.get());
+            }
+        } else {
+            execute(loaded_asts_.back().get());
         }
-        execute(loaded_asts_.back().get());
     }
 
     void exec_try(TryStmt* node) {
@@ -543,19 +577,26 @@ private:
     Value eval_pipe(PipeExpr* n)
     {
         Value left = eval(n->lhs.get());
+        set_var("_", left);
 
-
+        // si le côté droit est un >>, on affiche
         if(auto out = dynamic_cast<Output*>(n->rhs.get())) {
-            if(left.type == Value::Type::Array) {
-                for(auto& item : left.arr)
-                    std::cout << item.to_display() << "\n";
+            if(out->value) {
+                // >> avec une expression : on l'évalue avec _ = left
+                std::cout << eval(out->value.get()).to_display() << "\n";
             } else {
-                std::cout << left.to_display() << "\n";
+                // >> seul sans expression
+                if(left.type == Value::Type::Array) {
+                    for(auto& item : left.arr)
+                        std::cout << item.to_display() << "\n";
+                } else {
+                    std::cout << left.to_display() << "\n";
+                }
             }
             return left;
         }
 
-
+        // si le côté droit est un bloc lambda { }
         if(auto lambda = dynamic_cast<LambdaBlock*>(n->rhs.get())) {
             if(left.type == Value::Type::Array) {
                 std::vector<Value> result;
@@ -575,96 +616,148 @@ private:
 
         if(auto call = dynamic_cast<FuncCall*>(n->rhs.get())) {
 
-            if(call->name == "filter") {
-                auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
-                if(!lambda) throw std::runtime_error("filter attend un bloc { }");
-                std::vector<Value> result;
-                for(auto& item : left.arr) {
-                    push_scope();
-                    ScopeGuard guard{scopes_};
-                    def_var("item", item);
-                    Value cond = Value::null();
-                    try { execute(lambda->body.get()); }
-                    catch(ReturnException& ret) { cond = ret.value; }
-                    if(cond.truthy()) result.push_back(item);
-                }
-                return Value::from_arr(result);
-            }
-
-            if(call->name == "each") {
-                auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
-                if(!lambda) throw std::runtime_error("each attend un bloc { }");
-                std::vector<Value> result;
-                for(auto& item : left.arr) {
-                    push_scope();
-                    ScopeGuard guard{scopes_};
-                    def_var("item", item);
-                    Value val = Value::null();
-                    try { execute(lambda->body.get()); }
-                    catch(ReturnException& ret) { val = ret.value; }
-                    result.push_back(val);
-                }
-                return Value::from_arr(result);
-            }
-
-            // récupère le nom de la fonciton
-            // stocke les arguments
-            // met la valeur de gauche en 1er arg
-            std::string func_name = call->name;
-            std::vector<Value> args_values;
-            args_values.push_back(left);
-
+            // vérifie si _ est présent dans les args
+            bool has_placeholder = false;
             for(auto& arg : call->args) {
-                args_values.push_back(eval(arg.get()));
+                if(dynamic_cast<Placeholder*>(arg.get())) {
+                    has_placeholder = true;
+                    break;
+                }
             }
 
-            // Vérifie si c'eest une variable de type fonction
-            try {
-                Value var = get_var(call->name);
-                if (var.type == Value::Type::Function) {
-                    FuncDef* f = var.fn.func;
-                    if (args_values.size() != f->params.size())
-                        throw std::runtime_error("Nombre d'arguments incorrect pour " + call->name);
+            if(has_placeholder) {
+                // remplace chaque _ par left, sans injection automatique
+                std::vector<Value> args_values;
+                for(auto& arg : call->args) {
+                    if(dynamic_cast<Placeholder*>(arg.get()))
+                        args_values.push_back(left);
+                    else
+                        args_values.push_back(eval(arg.get()));
+                }
+
+                // vérifie si c'est une variable de type fonction
+                try {
+                    Value var = get_var(call->name);
+                    if(var.type == Value::Type::Function) {
+                        FuncDef* f = var.fn.func;
+                        push_scope();
+                        ScopeGuard guard{scopes_};
+                        def_var("__fn_boundary__", Value::from_bool(true));
+                        for(size_t i = 0; i < f->params.size(); i++)
+                            def_var(f->params[i], args_values[i]);
+                        Value result = Value::null();
+                        try { execute(f->body.get()); }
+                        catch(ReturnException& ret) { result = ret.value; }
+                        return result;
+                    }
+                } catch(...) {}
+
+                // cherche native ou fonction utilisateur
+                auto nat = natives_.find(call->name);
+                auto it  = funcs_.find(call->name);
+                if(nat != natives_.end()) return nat->second(args_values);
+                if(it  != funcs_.end()) {
+                    FuncDef* func = it->second;
                     push_scope();
                     ScopeGuard guard{scopes_};
                     def_var("__fn_boundary__", Value::from_bool(true));
-                    for (size_t i = 0; i < f->params.size(); i++)
-                        def_var(f->params[i], args_values[i]);
+                    for(size_t i = 0; i < func->params.size(); i++)
+                        def_var(func->params[i], args_values[i]);
                     Value result = Value::null();
-                    try {
-                        execute(f->body.get());
-                    } catch (ReturnException& ret) {
-                        result = ret.value;
-                    }
+                    try { execute(func->body.get()); }
+                    catch(ReturnException& ret) { result = ret.value; }
                     return result;
                 }
-            } catch(...) {}
 
-            auto nat = natives_.find(func_name);
-            auto it = funcs_.find(func_name);
+            } else {
+                // comportement classique — injection implicite en 1er arg
 
-            // cherche fonction native ou fonction utilisateur
-            if(nat != natives_.end()) {
-                return nat->second(args_values);
-            } else if(it != funcs_.end()) {
-                FuncDef* func = it->second;
-                if(args_values.size() == func->params.size()) {
-                    push_scope();
-                    ScopeGuard guard{scopes_};
-                    def_var("__fn_boundary__", Value::from_bool(true));
-
-                    for(size_t i = 0; i < func->params.size(); i++) {
-                        def_var(func->params[i], args_values[i]);
+                if(call->name == "filter") {
+                    auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
+                    if(!lambda) throw std::runtime_error("filter attend un bloc { }");
+                    std::vector<Value> result;
+                    for(auto& item : left.arr) {
+                        push_scope();
+                        ScopeGuard guard{scopes_};
+                        def_var("item", item);
+                        Value cond = Value::null();
+                        try { execute(lambda->body.get()); }
+                        catch(ReturnException& ret) { cond = ret.value; }
+                        if(cond.truthy()) result.push_back(item);
                     }
+                    return Value::from_arr(result);
+                }
 
-                    Value result = Value::null();
-                    try {
-                        execute(func->body.get());
-                    } catch(ReturnException& ret) {
-                        result = ret.value;
+                if(call->name == "each") {
+                    auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
+                    if(!lambda) throw std::runtime_error("each attend un bloc { }");
+                    std::vector<Value> result;
+                    for(auto& item : left.arr) {
+                        push_scope();
+                        ScopeGuard guard{scopes_};
+                        def_var("item", item);
+                        Value val = Value::null();
+                        try { execute(lambda->body.get()); }
+                        catch(ReturnException& ret) { val = ret.value; }
+                        result.push_back(val);
                     }
+                    return Value::from_arr(result);
+                }
 
-                    return result;
+                // récupère le nom de la fonction
+                // stocke les arguments
+                // met la valeur de gauche en 1er arg
+                std::string func_name = call->name;
+                std::vector<Value> args_values;
+                args_values.push_back(left);
+                for(auto& arg : call->args)
+                    args_values.push_back(eval(arg.get()));
+
+                // vérifie si c'est une variable de type fonction
+                try {
+                    Value var = get_var(call->name);
+                    if(var.type == Value::Type::Function) {
+                        FuncDef* f = var.fn.func;
+                        if(args_values.size() != f->params.size())
+                            throw std::runtime_error("Nombre d'arguments incorrect pour " + call->name);
+                        push_scope();
+                        ScopeGuard guard{scopes_};
+                        def_var("__fn_boundary__", Value::from_bool(true));
+                        for(size_t i = 0; i < f->params.size(); i++)
+                            def_var(f->params[i], args_values[i]);
+                        Value result = Value::null();
+                        try { execute(f->body.get()); }
+                        catch(ReturnException& ret) { result = ret.value; }
+                        return result;
+                    }
+                } catch(...) {}
+
+                // cherche fonction native ou fonction utilisateur
+                auto nat = natives_.find(func_name);
+                auto it  = funcs_.find(func_name);
+                if(nat != natives_.end()) return nat->second(args_values);
+                if(it  != funcs_.end()) {
+                    FuncDef* func = it->second;
+                    if(args_values.size() == func->params.size()) {
+                        push_scope();
+                        ScopeGuard guard{scopes_};
+                        def_var("__fn_boundary__", Value::from_bool(true));
+
+                        for(size_t i = 0; i < func->params.size(); i++) {
+                            def_var(func->params[i], args_values[i]);
+                        }
+
+                        Value result = Value::null();
+
+                        try {
+                            execute(func->body.get());
+                        }
+                        catch(ReturnException& ret) {
+                            result = ret.value;
+                        }
+
+                        return result;
+                    }
                 }
             }
         }

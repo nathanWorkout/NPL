@@ -1,0 +1,10 @@
+# c ; file descriptor du client
+# r : requete brute
+
+fn handler(c, r) -> {
+    >> "Requête reçue:"
+    >> r
+    << "HTTP/1.1 200 OK\r\nContent-Length: 9\r\n\r\nHello NPL"
+}
+
+serve(8080, handler)

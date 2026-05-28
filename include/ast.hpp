@@ -136,5 +136,10 @@ struct ExprStatement : ASTNode {
 
 struct BreakStmt : ASTNode {};
 struct ContinueStmt : ASTNode {};
+struct Placeholder : ASTNode {};
+
+struct InputExpr : ASTNode {
+    std::string prompt;
+};
 
 #endif

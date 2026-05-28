@@ -69,6 +69,8 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
     if(peek().value == "fn") return parse_funcdef();
 
     if(peek().value == "fn") return parse_funcdef();
+
+
     if(peek().type == TokenType::IDENTIFIER)
     {
         // Regarder si après un éventuel appel de fonction on trouve un "|"
@@ -81,12 +83,16 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
                 if (paren_count == 0) break;
                 paren_count--;
             }
+            else if (paren_count == 0 && tokens_[lookahead].value == "=") {
+                break;
+            }
             else if (paren_count == 0 && tokens_[lookahead].value == "|") {
                 has_pipe = true;
                 break;
             }
             lookahead++;
         }
+
         if (has_pipe) {
             auto node = std::make_unique<ExprStatement>();
             node->expr = parse_pipeline();
@@ -144,11 +150,54 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
         node->value = consume().value;
         return node;
     }
+
+    if(peek().type == TokenType::INPUT) {
+        consume();
+        auto node = std::make_unique<InputExpr>();
+        if(!at_end() && peek().type == TokenType::STRING)
+            node->prompt = consume().value;
+        return node;
+    }
     else if(peek().type == TokenType::BOOL)
     {
         auto node = std::make_unique<BoolLit>();
         node->value = (consume().value == "true");
         return node;
+    }
+
+    else if(peek().value == "fn") {
+        consume();
+        consume();
+        auto lambda = std::make_unique<FuncDef>();
+        lambda->name = "";
+        while(!at_end() && peek().value != ")") {
+            lambda->params.push_back(consume().value);
+            if(!at_end() && peek().value == ",") consume();
+        }
+        consume();
+        auto raw_body = parse_body();
+
+        if(auto es = dynamic_cast<ExprStatement*>(raw_body.get())) {
+            auto block = std::make_unique<Block>();
+            auto ret   = std::make_unique<ReturnStmt>();
+            ret->value = std::move(es->expr);
+            block->statements.push_back(std::move(ret));
+            lambda->body = std::move(block);
+        } else if(auto fc = dynamic_cast<FuncCall*>(raw_body.get())) {
+            auto block = std::make_unique<Block>();
+            auto ret   = std::make_unique<ReturnStmt>();
+            ret->value = std::move(raw_body);
+            block->statements.push_back(std::move(ret));
+            lambda->body = std::move(block);
+        } else {
+            lambda->body = std::move(raw_body);
+        }
+        return lambda;
+    }
+
+    if(peek().type == TokenType::IDENTIFIER && peek().value == "_") {
+        consume();
+        return std::make_unique<Placeholder>();
     }
     else if(peek().type == TokenType::IDENTIFIER)
     {
@@ -219,20 +268,6 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
     {
         consume();
         return std::make_unique<NullLit>();
-    }
-
-    else if(peek().value == "fn") {
-        auto lambda = std::make_unique<FuncDef>();
-        lambda->name = ""; // anonyme
-        consume();
-        consume();
-        while(!at_end() && peek().value != ")") {
-            lambda->params.push_back(consume().value);
-            if(!at_end() && peek().value == ",") consume();
-        }
-        consume();
-        lambda->body = parse_body(); // utilise parse_body -> { ... } ou -> expr
-        return lambda;
     }
 
     return nullptr;
@@ -458,7 +493,7 @@ std::unique_ptr<ASTNode> Parser::parse_funccall()
     consume();
     while(!at_end() && peek().value != ")")
     {
-        node->args.push_back(parse_expr());
+        node->args.push_back(parse_cond());
         if(!at_end() && peek().value == ",") consume();
     }
     consume();
@@ -577,7 +612,11 @@ std::unique_ptr<ASTNode> Parser::parse_pipeline()
         else if(peek().type == TokenType::OUTPUT)
         {
             consume();
-            pipe->rhs = std::make_unique<Output>();
+            auto out = std::make_unique<Output>();
+            // si une expression suit le >>
+            if(!at_end() && peek().type != TokenType::OPERATOR && peek().value != "|")
+                out->value = parse_cond();
+            pipe->rhs = std::move(out);
         }
 
         left = std::move(pipe);

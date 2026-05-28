@@ -1,10 +1,14 @@
+use http/request
+use http/router
+use http/response
+
 fn listen(port) -> tcp_listen(port)
 fn accept(srv) -> tcp_accept(srv)
 fn read(fd) -> tcp_read(fd)
 fn write(fd, data) -> tcp_write(fd, data)
 fn close(fd) -> tcp_close(fd)
 
-fn serve(port, handler) -> {
+fn serve(port) -> {
     srv = listen(port)
     if srv < 0 -> {
         >> "Erreur: impossible d'écouter port " + port
@@ -12,12 +16,14 @@ fn serve(port, handler) -> {
     }
     >> "Serveur NPL sur http://localhost:" + port
     while true -> {
-        client = accept(srv)
-        if client >= 0 -> {
-            req = read(client)
-            res = handler(client, req)
-            write(client, res)
-            close(client)
-        }
+    client = accept(srv)
+    if client >= 0 -> {
+        raw = read(client)
+        req = parse_http(raw)
+        res = dispatch(req)
+        if res == null -> res = not_found()
+        write(client, res)
+        close(client)
     }
+}
 }

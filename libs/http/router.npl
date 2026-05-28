@@ -1,0 +1,15 @@
+use http/request
+
+fn get(path, handler) -> {
+    route_add("GET", path, handler)
+}
+
+fn post(path, handler) -> route_add("POST", path, handler)
+fn put(path, handler) -> route_add("PUT", path, handler)
+fn delete(path, handler) -> route_add("DELETE", path, handler)
+
+fn dispatch(req) -> {
+    handler = route_match(req["method"], req["path"])
+    if handler != null -> << handler(req)
+    << null
+}
