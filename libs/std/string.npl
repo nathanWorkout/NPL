@@ -11,3 +11,15 @@ fn join(arr, delim) -> << string_join(arr, delim)
 fn char_at(s, i) -> << string_char_at(s, i)
 fn to_num(s) -> << string_to_num(s)
 fn to_string(n) -> << string_to_str(n)
+
+fn repeat(s, n) -> {
+    out = ""
+    i = 0
+
+    while i < n -> {
+        out = out + s
+        i++
+    }
+
+    << out
+}

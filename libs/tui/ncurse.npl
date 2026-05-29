@@ -1,0 +1,102 @@
+#=======================================================
+#                   Fonction de base
+#=======================================================
+
+fn init()      -> { curses_init(); << 0 }
+fn close()     -> { curses_end(); << 0 }
+fn move(x, y)  -> { curses_move(y, x); << 0 }
+fn print(text) -> { curses_print(to_string(text)); << 0 }
+fn refresh()   -> { curses_refresh(); << 0 }
+fn wait_key()  -> << curses_getch()
+fn clear()     -> { curses_clear(); << 0 }
+
+#=======================================================
+#               Couleurs (fonctions)
+#=======================================================
+fn set_color(c, s) -> { curses_set_color(c, s); << 0 }
+fn reset()         -> { curses_reset(); << 0 }
+
+#=======================================================
+#               Couleurs de base
+#=======================================================
+black   = 0
+red     = 1
+green   = 2
+yellow  = 3
+blue    = 4
+magenta = 5
+cyan    = 6
+white   = 7
+
+#=======================================================
+#                    Couleurs bright
+#=======================================================
+gray            = 8
+bright_red      = 9
+bright_green    = 10
+bright_yellow   = 11
+bright_blue     = 12
+bright_magenta  = 13
+bright_cyan     = 14
+bright_white    = 15
+
+#=======================================================
+#                    texte / fond
+#=======================================================
+pair_red_black     = 1
+pair_green_black   = 2
+pair_yellow_black  = 3
+pair_blue_black    = 4
+pair_magenta_black = 5
+pair_cyan_black    = 6
+pair_white_black   = 7
+
+#=======================================================
+#                Print utilitaires
+#=======================================================
+fn print_at(x, y, text) -> {
+    move(x, y)
+    print(text)
+}
+
+fn print_color(text, color) -> {
+    set_color(color, 0)
+    print(text)
+    reset()
+}
+
+#=======================================================
+#                   Texte helper
+#=======================================================
+
+fn println(text) -> {
+    print(text)
+    print("\n")
+}
+
+fn repeat(s, n) -> {
+    out = ""
+    i = 0
+    while i < n -> {
+        out = out + s
+        i++
+    }
+    << out
+}
+
+#=======================================================
+#                       Lignes
+#=======================================================
+fn line_h(x, y, len) -> {
+    move(x, y)
+    print(repeat("─", len))
+}
+
+fn line_v(x, y, len) -> {
+    i = 0
+    while i < len -> {
+        move(x, y + i)
+        print("│")
+        i++
+    }
+}

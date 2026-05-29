@@ -414,9 +414,26 @@ private:
 
     void exec_repeat(RepeatStmt* node) {
         Value cv = eval(node->count.get());
-        if(cv.type != Value::Type::Number) throw std::runtime_error("repeat attend un nombre");
-        long long count = (long long)cv.num;
-        for(long long it = 0; it < count; it++) {
+
+        double count;
+
+        if(cv.type == Value::Type::Number) {
+            count = cv.num;
+        }
+        else if(cv.type == Value::Type::String) {
+            try {
+                count = std::stod(cv.str);
+            } catch(...) {
+                throw std::runtime_error("repeat attend un nombre");
+            }
+        }
+        else {
+            throw std::runtime_error("repeat attend un nombre");
+        }
+
+        long long n = (long long)count;
+
+        for(long long i = 0; i < n; i++) {
             try {
                 execute(node->body.get());
             } catch(BreakException&) {
@@ -581,18 +598,40 @@ private:
 
         // si le côté droit est un >>, on affiche
         if(auto out = dynamic_cast<Output*>(n->rhs.get())) {
-            if(out->value) {
-                // >> avec une expression : on l'évalue avec _ = left
-                std::cout << eval(out->value.get()).to_display() << "\n";
-            } else {
-                // >> seul sans expression
-                if(left.type == Value::Type::Array) {
-                    for(auto& item : left.arr)
+
+            // si le côté gauche est un tableau
+            if(left.type == Value::Type::Array) {
+
+                for(auto& item : left.arr) {
+
+                    // _ devient l'élément actuel
+                    set_var("_", item);
+
+                    // >> avec une expression
+                    if(out->value)
+                        std::cout << eval(out->value.get()).to_display() << "\n";
+
+                    // >> seul
+                    else
                         std::cout << item.to_display() << "\n";
-                } else {
-                    std::cout << left.to_display() << "\n";
                 }
+
+                return left;
             }
+
+            // si ce n'est pas un tableau
+            set_var("_", left);
+
+            // >> avec une expression : on l'évalue avec _ = left
+            if(out->value) {
+                std::cout << eval(out->value.get()).to_display() << "\n";
+            }
+
+            // >> seul sans expression
+            else {
+                std::cout << left.to_display() << "\n";
+            }
+
             return left;
         }
 
@@ -600,21 +639,65 @@ private:
         if(auto lambda = dynamic_cast<LambdaBlock*>(n->rhs.get())) {
             if(left.type == Value::Type::Array) {
                 std::vector<Value> result;
+
                 for(auto& item : left.arr) {
                     push_scope();
                     ScopeGuard guard{scopes_};
+
                     def_var("item", item);
+
                     Value val = Value::null();
-                    try { execute(lambda->body.get()); }
-                    catch(ReturnException& ret) { val = ret.value; }
+                    try {
+                        execute(lambda->body.get());
+                    } catch(ReturnException& ret) {
+                        val = ret.value;
+                    }
+
                     result.push_back(val);
                 }
+
                 return Value::from_arr(result);
             }
+
             return left;
         }
 
-        if(auto call = dynamic_cast<FuncCall*>(n->rhs.get())) {
+        ASTNode* rhs = n->rhs.get();
+
+        if(auto call = dynamic_cast<FuncCall*>(rhs)) {
+
+            // cas spécial : repeat (pipeline natif)
+            if(call->name == "repeat") {
+
+                Value pattern;
+
+                // repeat "A"
+                if(call->args.size() >= 1) {
+                    pattern = eval(call->args[0].get());
+                }
+
+                // repeat | "A"
+                else {
+                    if(auto lit = dynamic_cast<StringLit*>(rhs)) {
+                        pattern = Value::from_str(lit->value);
+                    } else {
+                        pattern = eval(rhs);
+                    }
+                }
+
+                if(pattern.type != Value::Type::String) pattern = Value::from_str(pattern.to_display());
+
+                if(left.type != Value::Type::Number)
+                    throw std::runtime_error("repeat attend un nombre à gauche");
+
+                long long n = (long long)left.num;
+
+                std::vector<Value> out;
+
+                for(long long i = 0; i < n; i++) out.push_back(Value::from_str(pattern.str));
+
+                return Value::from_arr(out);
+            }
 
             // vérifie si _ est présent dans les args
             bool has_placeholder = false;
@@ -626,8 +709,10 @@ private:
             }
 
             if(has_placeholder) {
+
                 // remplace chaque _ par left, sans injection automatique
                 std::vector<Value> args_values;
+
                 for(auto& arg : call->args) {
                     if(dynamic_cast<Placeholder*>(arg.get()))
                         args_values.push_back(left);
@@ -640,14 +725,23 @@ private:
                     Value var = get_var(call->name);
                     if(var.type == Value::Type::Function) {
                         FuncDef* f = var.fn.func;
+
                         push_scope();
                         ScopeGuard guard{scopes_};
+
                         def_var("__fn_boundary__", Value::from_bool(true));
+
                         for(size_t i = 0; i < f->params.size(); i++)
                             def_var(f->params[i], args_values[i]);
+
                         Value result = Value::null();
-                        try { execute(f->body.get()); }
-                        catch(ReturnException& ret) { result = ret.value; }
+
+                        try {
+                            execute(f->body.get());
+                        } catch(ReturnException& ret) {
+                            result = ret.value;
+                        }
+
                         return result;
                     }
                 } catch(...) {}
@@ -655,79 +749,124 @@ private:
                 // cherche native ou fonction utilisateur
                 auto nat = natives_.find(call->name);
                 auto it  = funcs_.find(call->name);
-                if(nat != natives_.end()) return nat->second(args_values);
-                if(it  != funcs_.end()) {
+
+                if(nat != natives_.end())
+                    return nat->second(args_values);
+
+                if(it != funcs_.end()) {
                     FuncDef* func = it->second;
+
                     push_scope();
                     ScopeGuard guard{scopes_};
+
                     def_var("__fn_boundary__", Value::from_bool(true));
+
                     for(size_t i = 0; i < func->params.size(); i++)
                         def_var(func->params[i], args_values[i]);
+
                     Value result = Value::null();
-                    try { execute(func->body.get()); }
-                    catch(ReturnException& ret) { result = ret.value; }
+
+                    try {
+                        execute(func->body.get());
+                    } catch(ReturnException& ret) {
+                        result = ret.value;
+                    }
+
                     return result;
                 }
 
             } else {
-                // comportement classique — injection implicite en 1er arg
+
+                // comportement classique : injection implicite en 1er arg
+
+                std::vector<Value> args_values;
+                args_values.push_back(left);
+
+                for(auto& arg : call->args)
+                    args_values.push_back(eval(arg.get()));
 
                 if(call->name == "filter") {
                     auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
                     if(!lambda) throw std::runtime_error("filter attend un bloc { }");
+
                     std::vector<Value> result;
+
                     for(auto& item : left.arr) {
                         push_scope();
                         ScopeGuard guard{scopes_};
+
                         def_var("item", item);
+
                         Value cond = Value::null();
-                        try { execute(lambda->body.get()); }
-                        catch(ReturnException& ret) { cond = ret.value; }
-                        if(cond.truthy()) result.push_back(item);
+                        try {
+                            execute(lambda->body.get());
+                        } catch(ReturnException& ret) {
+                            cond = ret.value;
+                        }
+
+                        if(cond.truthy())
+                            result.push_back(item);
                     }
+
                     return Value::from_arr(result);
                 }
 
                 if(call->name == "each") {
                     auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
                     if(!lambda) throw std::runtime_error("each attend un bloc { }");
+
                     std::vector<Value> result;
+
                     for(auto& item : left.arr) {
                         push_scope();
                         ScopeGuard guard{scopes_};
+
                         def_var("item", item);
+
                         Value val = Value::null();
-                        try { execute(lambda->body.get()); }
-                        catch(ReturnException& ret) { val = ret.value; }
+                        try {
+                            execute(lambda->body.get());
+                        } catch(ReturnException& ret) {
+                            val = ret.value;
+                        }
+
                         result.push_back(val);
                     }
+
                     return Value::from_arr(result);
                 }
 
                 // récupère le nom de la fonction
+                std::string func_name = call->name;
+
                 // stocke les arguments
                 // met la valeur de gauche en 1er arg
-                std::string func_name = call->name;
-                std::vector<Value> args_values;
-                args_values.push_back(left);
-                for(auto& arg : call->args)
-                    args_values.push_back(eval(arg.get()));
 
-                // vérifie si c'est une variable de type fonction
                 try {
                     Value var = get_var(call->name);
+
                     if(var.type == Value::Type::Function) {
                         FuncDef* f = var.fn.func;
+
                         if(args_values.size() != f->params.size())
                             throw std::runtime_error("Nombre d'arguments incorrect pour " + call->name);
+
                         push_scope();
                         ScopeGuard guard{scopes_};
+
                         def_var("__fn_boundary__", Value::from_bool(true));
+
                         for(size_t i = 0; i < f->params.size(); i++)
                             def_var(f->params[i], args_values[i]);
+
                         Value result = Value::null();
-                        try { execute(f->body.get()); }
-                        catch(ReturnException& ret) { result = ret.value; }
+
+                        try {
+                            execute(f->body.get());
+                        } catch(ReturnException& ret) {
+                            result = ret.value;
+                        }
+
                         return result;
                     }
                 } catch(...) {}
@@ -735,12 +874,18 @@ private:
                 // cherche fonction native ou fonction utilisateur
                 auto nat = natives_.find(func_name);
                 auto it  = funcs_.find(func_name);
-                if(nat != natives_.end()) return nat->second(args_values);
-                if(it  != funcs_.end()) {
+
+                if(nat != natives_.end())
+                    return nat->second(args_values);
+
+                if(it != funcs_.end()) {
                     FuncDef* func = it->second;
+
                     if(args_values.size() == func->params.size()) {
+
                         push_scope();
                         ScopeGuard guard{scopes_};
+
                         def_var("__fn_boundary__", Value::from_bool(true));
 
                         for(size_t i = 0; i < func->params.size(); i++) {
@@ -751,8 +896,7 @@ private:
 
                         try {
                             execute(func->body.get());
-                        }
-                        catch(ReturnException& ret) {
+                        } catch(ReturnException& ret) {
                             result = ret.value;
                         }
 

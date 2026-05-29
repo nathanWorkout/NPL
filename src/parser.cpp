@@ -21,7 +21,8 @@ bool Parser::at_end()
 
 void Parser::expect_arrow()
 {
-    consume(); // ->
+    if(at_end() || peek().value != "->") throw std::runtime_error("Expected '->'");
+    consume();
 }
 
 
@@ -115,7 +116,9 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
         return nullptr;
     }
 
-    if(peek().value == "repeat") return parse_repeat();
+    if(peek().value == "repeat" && !(i > 0 && tokens_[i - 1].value == "|")) {
+        return parse_repeat();
+    }
     if(peek().value == "while") return parse_while();
     if(peek().value == "for") return parse_for();
     if(peek().value == "use") return parse_use();
@@ -581,7 +584,10 @@ std::unique_ptr<ASTNode> Parser::parse_pipeline()
             lambda->body = std::move(blk);
             pipe->rhs = std::move(lambda);
         }
-        else if(peek().type == TokenType::IDENTIFIER)
+        else if(
+            peek().type == TokenType::IDENTIFIER ||
+            peek().value == "repeat"
+        )
         {
             // Si le prochian token est (
             if (i+1 < tokens_.size() && tokens_[i+1].value == "(") {
@@ -591,20 +597,43 @@ std::unique_ptr<ASTNode> Parser::parse_pipeline()
             } else {
                 // Pas de parenthèses :
                 std::string fname = consume().value;
+
                 auto call = std::make_unique<FuncCall>();
                 call->name = fname;
 
                 // Vérifier si un lambda (ex filter)
                 if(!at_end() && peek().value == "{") {
+
                     consume();
+
                     auto lambda = std::make_unique<LambdaBlock>();
                     auto blk = std::make_unique<Block>();
+
                     while(!at_end() && peek().value != "}")
                         blk->statements.push_back(parse_statement());
+
                     consume();
+
                     lambda->body = std::move(blk);
+
                     call->args.push_back(std::move(lambda));
                 }
+
+                // argument sans parenthèses
+                while(
+                    !at_end() &&
+                    peek().value != "|" &&
+                    peek().value != "}" &&
+                    peek().value != ")"
+                ) {
+                    call->args.push_back(parse_cond());
+
+                    if(!at_end() && peek().value == ",")
+                        consume();
+                    else
+                        break;
+                }
+
                 pipe->rhs = std::move(call);
             }
         }

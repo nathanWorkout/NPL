@@ -397,14 +397,33 @@ int main(int argc, char* argv[])
     });
 
     interp.register_native("curses_move", [](std::vector<Value> args) {
-        if(args.size() < 2) throw std::runtime_error("curses_move attend 2 args");
-        move((int)args[0].num, (int)args[1].num);
+
+        int y = (int)args[0].num;
+        int x = (int)args[1].num;
+        int r = wmove(stdscr, y, x);
 
         return Value::null();
     });
 
     interp.register_native("curses_print", [](std::vector<Value> args) {
-        addstr(args[0].str.c_str());
+
+        std::string s = args[0].str;
+
+        int y, x;
+        getyx(stdscr, y, x);
+
+        for (char c : s) {
+            if (c == '\n') {
+                y++;
+                x = 0;
+                wmove(stdscr, y, x);
+            }
+            else {
+                waddch(stdscr, c);
+            }
+        }
+
+        wrefresh(stdscr);
         return Value::null();
     });
 
@@ -563,7 +582,6 @@ int main(int argc, char* argv[])
         }
         return Value::null();
     });
-
 
     interp.run(ast.get());
 
