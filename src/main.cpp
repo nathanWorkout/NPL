@@ -14,6 +14,10 @@
 #include <arpa/inet.h>
 #include <sys/stat.h>
 #include <ncurses.h>
+#include <locale.h>
+#include <algorithm>
+#include <cmath>
+#include <unordered_map>
 
 #include "lexer.hpp"
 #include "parser.hpp"
@@ -53,13 +57,15 @@ int main(int argc, char* argv[])
 
     interp.register_native("string_upper", [](std::vector<Value> args) {
         std::string s = args[0].str;
-        for(auto& c : s) c = std::toupper(c);
+        for(auto& c : s) c = std::toupper((unsigned char)c);
+
         return Value::from_str(s);
     });
 
     interp.register_native("string_lower", [](std::vector<Value> args) {
         std::string s = args[0].str;
-        for(auto& c : s) c = std::tolower(c);
+        for(auto& c : s) c = std::tolower((unsigned char)c);
+
         return Value::from_str(s);
     });
 
@@ -340,22 +346,28 @@ int main(int argc, char* argv[])
     static int current_style = 0;
 
     interp.register_native("curses_init", [](std::vector<Value> args) {
+        setlocale(LC_ALL, "");
+
         initscr();
+
+        if(has_colors()) {
+            start_color();
+            use_default_colors();
+        }
+
         cbreak();
         noecho();
         keypad(stdscr, TRUE);
-        start_color();
+        curs_set(0);
 
-        // Initialise les paires de couleurs de base
-        init_pair(1, COLOR_RED, COLOR_BLACK);
-        init_pair(2, COLOR_GREEN, COLOR_BLACK);
-        init_pair(3, COLOR_YELLOW, COLOR_BLACK);
-        init_pair(4, COLOR_BLUE, COLOR_BLACK);
-        init_pair(5, COLOR_MAGENTA, COLOR_BLACK);
-        init_pair(6, COLOR_CYAN, COLOR_BLACK);
-        init_pair(7, COLOR_WHITE, COLOR_BLACK);
+        init_pair(1, COLOR_RED, -1);
+        init_pair(2, COLOR_GREEN, -1);
+        init_pair(3, COLOR_YELLOW, -1);
+        init_pair(4, COLOR_BLUE, -1);
+        init_pair(5, COLOR_MAGENTA, -1);
+        init_pair(6, COLOR_CYAN, -1);
+        init_pair(7, COLOR_WHITE, -1);
 
-        // Texte noir sur fond coloré
         init_pair(10, COLOR_BLACK, COLOR_RED);
         init_pair(11, COLOR_BLACK, COLOR_GREEN);
         init_pair(12, COLOR_BLACK, COLOR_YELLOW);
@@ -363,6 +375,8 @@ int main(int argc, char* argv[])
         init_pair(14, COLOR_BLACK, COLOR_MAGENTA);
         init_pair(15, COLOR_BLACK, COLOR_CYAN);
         init_pair(16, COLOR_BLACK, COLOR_WHITE);
+
+        refresh();
 
         return Value::null();
     });
@@ -383,12 +397,14 @@ int main(int argc, char* argv[])
     });
 
     interp.register_native("curses_move", [](std::vector<Value> args) {
+        if(args.size() < 2) throw std::runtime_error("curses_move attend 2 args");
         move((int)args[0].num, (int)args[1].num);
+
         return Value::null();
     });
 
     interp.register_native("curses_print", [](std::vector<Value> args) {
-        printw(args[0].str.c_str());
+        addstr(args[0].str.c_str());
         return Value::null();
     });
 
@@ -436,6 +452,13 @@ int main(int argc, char* argv[])
 
         return Value::null();
     });
+
+    interp.register_native("chr", [](std::vector<Value> args) -> Value {
+        if(args.empty()) return Value::from_str("");
+        char c = (char)(int)args[0].num;
+        return Value::from_str(std::string(1, c));
+    });
+
     //================================================================
     //                      BACKEND (SERVEURS)
     //================================================================
@@ -448,6 +471,7 @@ int main(int argc, char* argv[])
 
         int opt = 1;
         setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        setsockopt(server_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt));
 
         struct sockaddr_in addr;
         memset(&addr, 0, sizeof(addr));
@@ -484,13 +508,28 @@ int main(int argc, char* argv[])
     interp.register_native("tcp_write", [](std::vector<Value> args) {
         int fd = (int)args[0].num;
         std::string data = args[1].str;
-        ssize_t n = write(fd, data.c_str(), data.size());
-        return Value::from_bool(n == (ssize_t)data.size());
+
+        size_t sent = 0;
+
+        while(sent < data.size())
+        {
+            ssize_t n = write(
+                fd,
+                data.c_str() + sent,
+                data.size() - sent
+            );
+
+            if(n <= 0)
+                return Value::from_bool(false);
+
+            sent += n;
+        }
+
+        return Value::from_bool(true);
     });
 
     interp.register_native("tcp_close", [](std::vector<Value> args) {
         int fd = (int)args[0].num;
-        shutdown(fd, SHUT_WR);  // fin apès avoir vidé les buffers
         close(fd);
         return Value::null();
     });

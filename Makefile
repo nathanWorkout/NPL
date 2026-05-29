@@ -1,5 +1,5 @@
 CXX      := g++
-CXXFLAGS := -std=c++23 -Wall -Wextra -Iinclude
+CXXFLAGS := -std=c++23 -Wall -Wextra -Iinclude -finput-charset=UTF-8 -fexec-charset=UTF-8
 DBGFLAGS := -g3 -O0 -fsanitize=address,undefined
 RELFLAGS := -O2
 
@@ -10,7 +10,7 @@ TARGET   := npl
 SRCS := $(wildcard $(SRCDIR)/*.cpp)
 OBJS := $(patsubst $(SRCDIR)/%.cpp, $(BUILDDIR)/%.o, $(SRCS))
 
-LIBS = -lncurses
+LIBS = -lncursesw
 
 .PHONY: all debug clean re run
 

@@ -1,4 +1,4 @@
-fn len(s) -> << string_length(s)
+fn str_len(s) -> << string_length(s)
 fn up(s) -> << string_upper(s)
 fn low(s) -> << string_lower(s)
 fn trim(s) -> << string_trim(s)

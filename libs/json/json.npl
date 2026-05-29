@@ -43,7 +43,7 @@ fn stringify(data) -> {
 }
 
 fn skip_ws(s, i) -> {
-    while i < len(s) -> {
+    while i < str_len(s) -> {
         c = char_at(s, i)
         if c == " " || c == "\n" || c == "\t" -> i++
         else -> << i
@@ -78,18 +78,18 @@ fn is_digit(c) -> {
 
 fn parse_number(s, i) -> {
     num_result = ""
-    if i < len(s) && char_at(s, i) == "-" -> {
+    if i < str_len(s) && char_at(s, i) == "-" -> {
         num_result = num_result + "-"
         i++
     }
-    while i < len(s) && is_digit(char_at(s, i)) -> {
+    while i < str_len(s) && is_digit(char_at(s, i)) -> {
         num_result = num_result + char_at(s, i)
         i++
     }
-    if i < len(s) && char_at(s, i) == "." -> {
+    if i < str_len(s) && char_at(s, i) == "." -> {
         num_result = num_result + "."
         i++
-        while i < len(s) && is_digit(char_at(s, i)) -> {
+        while i < str_len(s) && is_digit(char_at(s, i)) -> {
             num_result = num_result + char_at(s, i)
             i++
         }

@@ -11,7 +11,7 @@ fn parse_http(raw) -> {
 
     headers = {}
     i = 1
-    while i < len(lines) && lines[i] != "" -> {
+    while i < arr_len(lines) && lines[i] != "" -> {
         h = split(lines[i], ": ")
         headers[h[0]] = h[1]
         i++
@@ -19,7 +19,7 @@ fn parse_http(raw) -> {
 
     i++
     body = ""
-    while i < len(lines) -> {
+    while i < arr_len(lines) -> {
         body = body + lines[i]
         i++
     }

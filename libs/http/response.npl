@@ -3,7 +3,6 @@ use std/string
 
 fn response(status, body) -> {
     status_text = "OK"
-    status_text = "OK"
     if status   == 400 -> status_text = "Bad Request"
     elif status == 401 -> status_text = "Unauthorized"
     elif status == 403 -> status_text = "Forbidden"
@@ -15,7 +14,7 @@ fn response(status, body) -> {
 }
 
 fn json_response(status, body) -> {
-    << "HTTP/1.1 " + status + " OK\r\nContent-Type: application/json\r\nContent-Length: " + len(body) + "\r\n\r\n" + body
+    << "HTTP/1.1 " + status + " OK\r\nContent-Type: application/json\r\nContent-Length: " + string_length(body) + "\r\n\r\n" + body
 }
 
 fn not_found() -> {

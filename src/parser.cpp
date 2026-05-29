@@ -68,7 +68,6 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
     }
     if(peek().value == "fn") return parse_funcdef();
 
-    if(peek().value == "fn") return parse_funcdef();
 
 
     if(peek().type == TokenType::IDENTIFIER)
