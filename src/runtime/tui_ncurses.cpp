@@ -2,6 +2,8 @@
 #include "../../include/interpreter.hpp"
 #include <ncurses.h>
 #include <vector>
+#include <algorithm>
+#include <cctype>
 #include <locale.h>
 
 namespace runtime {
@@ -18,10 +20,14 @@ namespace runtime {
     static std::vector<Box> ui_boxes;
     static int ui_focus = 0;
     static bool ui_running = false;
+    static std::vector<std::string> feed_lines;
 
-    auto draw_chat_box(
-        int x, int y, int w, int h,
-        const std::vector<std::string>& messages,
+    static void draw_feed(
+        int x,
+        int y,
+        int w,
+        int h,
+        const std::vector<std::string>& items,
         int border,
         const std::string& title
     ) {
@@ -51,12 +57,12 @@ namespace runtime {
         attroff(COLOR_PAIR(border));
 
         int visible = h - 2;
-        int start = std::max(0, (int)messages.size() - visible);
+        int start = std::max(0, (int)items.size() - visible);
 
-        for (int i = start; i < (int)messages.size(); i++) {
+        for (int i = start; i < (int)items.size(); i++) {
             int line = i - start;
 
-            std::string msg = messages[i];
+            std::string msg = items[i];
             if ((int)msg.size() > w - 2)
                 msg = msg.substr(0, w - 3);
 
@@ -64,7 +70,7 @@ namespace runtime {
         }
     }
 
-    static void draw_box(const Box& b, bool focus)
+    static void draw_frame(const Box& b, bool focus)
     {
         int c = focus ? 7 : b.border;
 
@@ -304,31 +310,25 @@ namespace runtime {
                 clear();
 
                 for (size_t i = 0; i < ui_boxes.size(); i++) {
-                    draw_box(ui_boxes[i], i == (size_t)ui_focus);
+                    draw_frame(ui_boxes[i], i == (size_t)ui_focus);
                 }
 
                 refresh();
 
                 int key = getch();
-                mvprintw(0, 0, "KEY=%d FOCUS=%d    ", key, ui_focus);
-                refresh();
-
-                move(0, 0);
-                clrtoeol();
-                printw("key=%d", key);
 
                 switch (key) {
 
                     case KEY_LEFT:
                         ui_focus--;
                         if (ui_focus < 0)
-                            ui_focus = ui_boxes.size() - 1;
+                            ui_focus = (int)ui_boxes.size() - 1;
                         break;
 
                     case KEY_UP:
                         ui_focus--;
                         if (ui_focus < 0)
-                            ui_focus = ui_boxes.size() - 1;
+                            ui_focus = (int)ui_boxes.size() - 1;
                         break;
 
                     case KEY_RIGHT:
@@ -367,15 +367,15 @@ namespace runtime {
         });
 
         // =================================================
-        //                  Chat TUI
+        //                  Feed / log view
         // =================================================
 
-        static std::vector<std::string> chat_history;
-
-        interp.register_native("chat_input", [](std::vector<Value> args) {
+        interp.register_native("input", [](std::vector<Value> args) {
 
             if (args.size() < 4)
-                throw std::runtime_error("chat_input(x,y,width,color)");
+                throw std::runtime_error(
+                    "input(x,y,width,color)"
+                );
 
             int x = (int)args[0].num;
             int y = (int)args[1].num;
@@ -432,25 +432,60 @@ namespace runtime {
             return Value::from_str(buffer);
         });
 
-        interp.register_native("chat_messages", [](std::vector<Value> args) {
+        interp.register_native("feed_draw", [](std::vector<Value> args) {
 
-            if (args.size() < 7)
-                throw std::runtime_error("chat_messages(x,y,w,h,msg,color,title)");
+            if (args.size() < 6)
+                throw std::runtime_error(
+                    "feed_draw(x,y,w,h,color,title)"
+                );
 
             int x = (int)args[0].num;
             int y = (int)args[1].num;
             int w = (int)args[2].num;
             int h = (int)args[3].num;
 
-            std::string msg = args[4].to_display();
-            int border = (int)args[5].num;
-            std::string title = args[6].to_display();
+            int color = (int)args[4].num;
 
-            chat_history.push_back(msg);
+            std::string title =
+                args[5].to_display();
 
-            draw_chat_box(x, y, w, h, chat_history, border, title);
+            draw_feed(
+                x,
+                y,
+                w,
+                h,
+                feed_lines,
+                color,
+                title
+            );
 
             return Value::null();
+        });
+
+        interp.register_native("feed_push", [](std::vector<Value> args) {
+
+            if(args.size() < 1)
+                throw std::runtime_error("feed_push(text)");
+
+            feed_lines.push_back(
+                args[0].to_display()
+            );
+
+            return Value::null();
+        });
+
+        interp.register_native("feed_clear", [](std::vector<Value>) {
+
+            feed_lines.clear();
+
+            return Value::null();
+        });
+
+        interp.register_native("feed_count", [](std::vector<Value>) {
+
+            return Value::from_num(
+                feed_lines.size()
+            );
         });
     }
 
