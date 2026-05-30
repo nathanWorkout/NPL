@@ -27,6 +27,16 @@ fn clear() -> {
 fn wait_key() -> << curses_getch()
 
 #=======================================================
+#                  Terminal noir
+#=======================================================
+
+# IMPORTANT car certaines couleurs sont incompatible avec le blur des terminaux
+# Optionel
+fn black_background() -> {
+    curses_black_bg()
+}
+
+#=======================================================
 #                       Couleurs
 #=======================================================
 

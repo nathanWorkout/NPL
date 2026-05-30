@@ -176,12 +176,15 @@ private:
     void pop_scope()  { scopes_.pop_back(); }
 
     void set_var(const std::string& name, Value val) {
-        for(int i = scopes_.size() - 1; i >= 0; i--) {
+        if(scopes_.empty()) push_scope();
+
+        for(int i = (int)scopes_.size() - 1; i >= 0; i--) {
             if(scopes_[i].count(name)) {
                 scopes_[i][name] = val;
                 return;
             }
         }
+
         scopes_.back()[name] = val;
     }
 
@@ -208,7 +211,11 @@ private:
         if(auto n = dynamic_cast<Block*>(node))            exec_block(n);
         else if(auto n = dynamic_cast<Assign*>(node))      exec_assign(n);
         else if(auto n = dynamic_cast<IndexAssign*>(node)) exec_index_assign(n);
-        else if(auto n = dynamic_cast<Output*>(node))      exec_output(n);
+            // else if(auto n = dynamic_cast<Output*>(node))      exec_output(n);
+        else if(auto n = dynamic_cast<Output*>(node)) {
+            std::cerr << "OUTPUT NODE FOUND\n";
+            exec_output(n);
+        }
         else if(auto n = dynamic_cast<IfStmt*>(node))      exec_if(n);
         else if(auto n = dynamic_cast<RepeatStmt*>(node))  exec_repeat(n);
         else if(auto n = dynamic_cast<WhileStmt*>(node))   exec_while(n);
@@ -296,8 +303,7 @@ private:
 
         if(auto n = dynamic_cast<InputExpr*>(node)) {
             if(!n->prompt.empty()) print(n->prompt);
-            std::string input;
-            std::getline(std::cin, input);
+            std::string input = read_input();
             try { return Value::from_num(std::stod(input)); }
             catch(...) { return Value::from_str(input); }
         }
@@ -412,24 +418,61 @@ private:
         throw std::runtime_error(node->name + " n'est pas un tableau ou une map");
     }
 
-    void print(const std::string& text, bool newline = true){
+    std::string read_input()
+    {
+        if (curses_mode) return read_input_tui();
+        return read_input_terminal();
+    }
+
+    std::string read_input_terminal()
+    {
+        std::string input;
+        std::getline(std::cin, input);
+        return input;
+    }
+
+    std::string read_input_tui()
+    {
+        echo();
+        curs_set(1);
+        timeout(-1);
+
+        std::string input;
+        int ch;
+
+        while ((ch = getch()) != '\n') {
+            if (ch == KEY_BACKSPACE || ch == 127 || ch == 8) {
+                if (!input.empty())
+                    input.pop_back();
+            }
+            else if (isprint(ch)) {
+                input.push_back((char)ch);
+            }
+        }
+
+        noecho();
+        curs_set(0);
+
+        return input;
+    }
+
+    void print(const std::string& text, bool newline = true)
+    {
+        std::cerr << "CURSES MODE = " << curses_mode << "\n";
         if (curses_mode) {
-            int y, x;
-            getyx(stdscr, y, x);
-
-            mvprintw(y, x, "%s", text.c_str());
+            printw("%s", text.c_str());
             if (newline) printw("\n");
-
             refresh();
         } else {
             std::cout << text;
-            if (newline) std::cout << "\n";
+            if (newline) std::cout << '\n';
         }
     }
 
 
     void exec_output(Output* node)
     {
+        std::cerr << "EXEC_OUTPUT\n";
         std::string text = eval(node->value.get()).to_display();
         print(text);
     }
@@ -576,16 +619,23 @@ private:
         return result;
     }
 
-    void exec_input(InputStmt* node) {
-        if(!node->prompt.empty()) print(node->prompt, false);
-        std::string input;
-        std::getline(std::cin, input);
-        try { set_var(node->name, Value::from_num(std::stod(input))); }
-        catch(...) { set_var(node->name, Value::from_str(input)); }
+    void exec_input(InputStmt* node)
+    {
+        if(!node->prompt.empty())
+            print(node->prompt, false);
+
+        std::string input = read_input();
+
+        try {
+            set_var(node->name, Value::from_num(std::stod(input)));
+        } catch(...) {
+            set_var(node->name, Value::from_str(input));
+        }
     }
 
     void exec_use(UseStmt* node) {
         if(loaded_libs_.count(node->lib)) return; // évite les overflow dues au mutiples utilisation du fichier
+        loaded_libs_.insert(node->lib);
 
         std::string lib = node->lib;
         size_t pos;

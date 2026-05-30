@@ -4,13 +4,15 @@ DBGFLAGS := -g3 -O0 -fsanitize=address,undefined
 RELFLAGS := -O2
 
 SRCDIR   := src
+RUNTIMEDIR := src/runtime
 BUILDDIR := build
 TARGET   := npl
 
-SRCS := $(wildcard $(SRCDIR)/*.cpp)
+SRCS := $(wildcard $(SRCDIR)/*.cpp) $(wildcard $(RUNTIMEDIR)/*.cpp)
 OBJS := $(patsubst $(SRCDIR)/%.cpp, $(BUILDDIR)/%.o, $(SRCS))
+OBJS := $(OBJS:$(RUNTIMEDIR)/%.cpp=$(BUILDDIR)/runtime/%.o)
 
-LIBS = -lncursesw
+LIBS := -lncursesw
 
 .PHONY: all debug clean re run
 
@@ -24,6 +26,7 @@ debug: $(OBJS)
 	$(CXX) $(CXXFLAGS) $(DBGFLAGS) -o $(TARGET)_dbg $^ $(LIBS)
 
 $(BUILDDIR)/%.o: $(SRCDIR)/%.cpp | $(BUILDDIR)
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILDDIR):
