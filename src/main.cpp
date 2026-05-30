@@ -345,7 +345,7 @@ int main(int argc, char* argv[])
     static int current_color = 0;
     static int current_style = 0;
 
-    interp.register_native("curses_init", [](std::vector<Value> args) {
+    interp.register_native("curses_init", [&](std::vector<Value> args) {
         setlocale(LC_ALL, "");
 
         initscr();
@@ -376,12 +376,15 @@ int main(int argc, char* argv[])
         init_pair(15, COLOR_BLACK, COLOR_CYAN);
         init_pair(16, COLOR_BLACK, COLOR_WHITE);
 
+        interp.set_curses_mode(true);
+
         refresh();
 
         return Value::null();
     });
 
-    interp.register_native("curses_end", [](std::vector<Value> args) {
+    interp.register_native("curses_end", [&](std::vector<Value> args) {
+        interp.set_curses_mode(false);
         endwin();
         return Value::null();
     });
@@ -398,29 +401,31 @@ int main(int argc, char* argv[])
 
     interp.register_native("curses_move", [](std::vector<Value> args) {
 
+        if(args.size() < 2) throw std::runtime_error("curses_move(y, x) attend 2 arguments");
+
         int y = (int)args[0].num;
         int x = (int)args[1].num;
-        int r = wmove(stdscr, y, x);
+
+        if(wmove(stdscr, y, x) == ERR) throw std::runtime_error("Position hors écran");
 
         return Value::null();
     });
 
     interp.register_native("curses_print", [](std::vector<Value> args) {
+        std::string s = args[0].to_display();
+        size_t start = 0;
+        size_t pos;
 
-        std::string s = args[0].str;
-
-        int y, x;
-        getyx(stdscr, y, x);
-
-        for (char c : s) {
-            if (c == '\n') {
-                y++;
-                x = 0;
-                wmove(stdscr, y, x);
+        while ((pos = s.find('\n', start)) != std::string::npos) {
+            if (pos > start) {
+                waddnstr(stdscr, s.c_str() + start, pos - start);
             }
-            else {
-                waddch(stdscr, c);
-            }
+            waddch(stdscr, '\n');
+            start = pos + 1;
+        }
+
+        if (start < s.length()) {
+            waddstr(stdscr, s.c_str() + start);
         }
 
         wrefresh(stdscr);
@@ -432,38 +437,49 @@ int main(int argc, char* argv[])
     });
 
     interp.register_native("curses_set_color", [](std::vector<Value> args) {
+
         int color = (int)args[0].num;
         int style = args.size() > 1 ? (int)args[1].num : 0;
+
+        // reset ancien état propre
+        if (current_style & 1)  wattroff(stdscr, A_BOLD);
+        if (current_style & 2)  wattroff(stdscr, A_UNDERLINE);
+        if (current_style & 4)  wattroff(stdscr, A_REVERSE);
+        if (current_style & 8)  wattroff(stdscr, A_BLINK);
+        if (current_style & 16) wattroff(stdscr, A_DIM);
+
+        if (current_color > 0) {
+            wattroff(stdscr, COLOR_PAIR(current_color));
+        }
 
         current_color = color;
         current_style = style;
 
-        // Applique les styles
-        if(style & 1) attron(A_BOLD);
-        if(style & 2) attron(A_UNDERLINE);
-        if(style & 4) attron(A_REVERSE);
-        if(style & 8) attron(A_BLINK);
-        if(style & 16) attron(A_DIM);
+        // appliquer styles
+        if (style & 1)  wattron(stdscr, A_BOLD);
+        if (style & 2)  wattron(stdscr, A_UNDERLINE);
+        if (style & 4)  wattron(stdscr, A_REVERSE);
+        if (style & 8)  wattron(stdscr, A_BLINK);
+        if (style & 16) wattron(stdscr, A_DIM);
 
-        // Applique la couleur
-        if(color > 0) {
-            attron(COLOR_PAIR(color));
+        // appliquer la couleur
+        if (color > 0) {
+            wattrset(stdscr, COLOR_PAIR(color));
         }
 
         return Value::null();
     });
 
     interp.register_native("curses_reset", [](std::vector<Value> args) {
-        // Enlève les styles
-        if(current_style & 1) attroff(A_BOLD);
-        if(current_style & 2) attroff(A_UNDERLINE);
-        if(current_style & 4) attroff(A_REVERSE);
-        if(current_style & 8) attroff(A_BLINK);
-        if(current_style & 16) attroff(A_DIM);
 
-        // Enlève la couleur
-        if(current_color > 0) {
-            attroff(COLOR_PAIR(current_color));
+        if (current_style & 1)  wattroff(stdscr, A_BOLD);
+        if (current_style & 2)  wattroff(stdscr, A_UNDERLINE);
+        if (current_style & 4)  wattroff(stdscr, A_REVERSE);
+        if (current_style & 8)  wattroff(stdscr, A_BLINK);
+        if (current_style & 16) wattroff(stdscr, A_DIM);
+
+        if (current_color > 0) {
+            wattrset(stdscr, A_NORMAL);
         }
 
         current_color = 0;
@@ -477,6 +493,8 @@ int main(int argc, char* argv[])
         char c = (char)(int)args[0].num;
         return Value::from_str(std::string(1, c));
     });
+
+
 
     //================================================================
     //                      BACKEND (SERVEURS)

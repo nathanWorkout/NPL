@@ -9,6 +9,7 @@
 #include <fstream>
 #include <functional>
 #include <unordered_set>
+#include <ncurses.h>
 #include "parser.hpp"
 #include "lexer.hpp"
 
@@ -132,18 +133,30 @@ class Interpreter
 {
 public:
 void run(ASTNode* node) {
-        push_scope();
-        if(auto block = dynamic_cast<Block*>(node)) {
-            for(auto& s : block->statements) {
-                if(!s) continue;
-                if(auto fn = dynamic_cast<FuncDef*>(s.get()))
-                    exec_funcdef(fn);
-                else
-                    execute(s.get());
-            }
-            return;
+    push_scope();
+    ScopeGuard guard{scopes_};
+
+    if(auto block = dynamic_cast<Block*>(node)) {
+        for(auto& s : block->statements) {
+            if(!s) continue;
+
+            if(auto fn = dynamic_cast<FuncDef*>(s.get()))
+                exec_funcdef(fn);
+            else
+                execute(s.get());
         }
-        execute(node);
+        return;
+    }
+
+    execute(node);
+}
+
+void set_curses_mode(bool enabled) {
+        curses_mode = enabled;
+    }
+
+    bool is_curses_mode() const {
+        return curses_mode;
     }
 
     std::unordered_map<std::string, std::function<Value(std::vector<Value>)>> natives_;
@@ -153,6 +166,7 @@ void run(ASTNode* node) {
     }
 
 private:
+    bool curses_mode = false;
     std::vector<std::unordered_map<std::string, Value>> scopes_;
     std::unordered_map<std::string, FuncDef*> funcs_;
     std::vector<std::unique_ptr<ASTNode>> loaded_asts_;
@@ -281,7 +295,7 @@ private:
         }
 
         if(auto n = dynamic_cast<InputExpr*>(node)) {
-            if(!n->prompt.empty()) std::cout << n->prompt;
+            if(!n->prompt.empty()) print(n->prompt);
             std::string input;
             std::getline(std::cin, input);
             try { return Value::from_num(std::stod(input)); }
@@ -398,8 +412,26 @@ private:
         throw std::runtime_error(node->name + " n'est pas un tableau ou une map");
     }
 
-    void exec_output(Output* node) {
-        std::cout << eval(node->value.get()).to_display() << "\n";
+    void print(const std::string& text, bool newline = true){
+        if (curses_mode) {
+            int y, x;
+            getyx(stdscr, y, x);
+
+            mvprintw(y, x, "%s", text.c_str());
+            if (newline) printw("\n");
+
+            refresh();
+        } else {
+            std::cout << text;
+            if (newline) std::cout << "\n";
+        }
+    }
+
+
+    void exec_output(Output* node)
+    {
+        std::string text = eval(node->value.get()).to_display();
+        print(text);
     }
 
     void exec_if(IfStmt* node) {
@@ -545,7 +577,7 @@ private:
     }
 
     void exec_input(InputStmt* node) {
-        if(!node->prompt.empty()) std::cout << node->prompt;
+        if(!node->prompt.empty()) print(node->prompt, false);
         std::string input;
         std::getline(std::cin, input);
         try { set_var(node->name, Value::from_num(std::stod(input))); }
@@ -609,11 +641,11 @@ private:
 
                     // >> avec une expression
                     if(out->value)
-                        std::cout << eval(out->value.get()).to_display() << "\n";
+                        print(eval(out->value.get()).to_display());
 
                     // >> seul
                     else
-                        std::cout << item.to_display() << "\n";
+                        print(item.to_display());
                 }
 
                 return left;
@@ -624,12 +656,12 @@ private:
 
             // >> avec une expression : on l'évalue avec _ = left
             if(out->value) {
-                std::cout << eval(out->value.get()).to_display() << "\n";
+                print(eval(out->value.get()).to_display());
             }
 
             // >> seul sans expression
             else {
-                std::cout << left.to_display() << "\n";
+                print(left.to_display());
             }
 
             return left;

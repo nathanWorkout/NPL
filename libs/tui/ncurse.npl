@@ -1,102 +1,228 @@
+use std/string
+
 #=======================================================
 #                   Fonction de base
 #=======================================================
 
-fn init()      -> { curses_init(); << 0 }
-fn close()     -> { curses_end(); << 0 }
-fn move(x, y)  -> { curses_move(y, x); << 0 }
-fn print(text) -> { curses_print(to_string(text)); << 0 }
-fn refresh()   -> { curses_refresh(); << 0 }
-fn wait_key()  -> << curses_getch()
-fn clear()     -> { curses_clear(); << 0 }
-
-#=======================================================
-#               Couleurs (fonctions)
-#=======================================================
-fn set_color(c, s) -> { curses_set_color(c, s); << 0 }
-fn reset()         -> { curses_reset(); << 0 }
-
-#=======================================================
-#               Couleurs de base
-#=======================================================
-black   = 0
-red     = 1
-green   = 2
-yellow  = 3
-blue    = 4
-magenta = 5
-cyan    = 6
-white   = 7
-
-#=======================================================
-#                    Couleurs bright
-#=======================================================
-gray            = 8
-bright_red      = 9
-bright_green    = 10
-bright_yellow   = 11
-bright_blue     = 12
-bright_magenta  = 13
-bright_cyan     = 14
-bright_white    = 15
-
-#=======================================================
-#                    texte / fond
-#=======================================================
-pair_red_black     = 1
-pair_green_black   = 2
-pair_yellow_black  = 3
-pair_blue_black    = 4
-pair_magenta_black = 5
-pair_cyan_black    = 6
-pair_white_black   = 7
-
-#=======================================================
-#                Print utilitaires
-#=======================================================
-fn print_at(x, y, text) -> {
-    move(x, y)
-    print(text)
+fn init() -> {
+    curses_init()
+    << 0
 }
 
-fn print_color(text, color) -> {
-    set_color(color, 0)
-    print(text)
-    reset()
+fn close() -> {
+    curses_end()
+    << 0
 }
 
-#=======================================================
-#                   Texte helper
-#=======================================================
-
-fn println(text) -> {
-    print(text)
-    print("\n")
+fn refresh() -> {
+    curses_refresh()
+    << 0
 }
 
-fn repeat(s, n) -> {
-    out = ""
-    i = 0
-    while i < n -> {
-        out = out + s
-        i++
-    }
-    << out
+fn clear() -> {
+    curses_clear()
+    << 0
+}
+
+fn wait_key() -> << curses_getch()
+
+#=======================================================
+#                       Couleurs
+#=======================================================
+
+BLACK   = 0
+RED     = 1
+GREEN   = 2
+YELLOW  = 3
+BLUE    = 4
+MAGENTA = 5
+CYAN    = 6
+WHITE   = 7
+
+
+# IMPORTANT : ces fonciton sont pour le rendu avec pipeline
+fn red(text) -> {
+    curses_set_color(RED, 0)
+    << text
+}
+
+fn green(text) -> {
+    curses_set_color(GREEN, 0)
+    << text
+}
+
+fn yellow(text) -> {
+    curses_set_color(YELLOW, 0)
+    << text
+}
+
+fn blue(text) -> {
+    curses_set_color(BLUE, 0)
+    << text
+}
+
+fn magenta(text) -> {
+    curses_set_color(MAGENTA, 0)
+    << text
+}
+
+fn cyan(text) -> {
+    curses_set_color(CYAN, 0)
+    << text
+}
+
+fn white(text) -> {
+    curses_set_color(WHITE, 0)
+    << text
+}
+
+# IMPORTANT : cette focntion est pour le rendu sans pipeline
+fn text(x, y, content, color) -> {
+
+    curses_set_color(color, 0)
+
+    curses_move(y, x)
+    curses_print(to_string(content))
+
+    curses_reset()
+
+    << content
+}
+
+
+#=======================================================
+#                   Positionnement
+#=======================================================
+
+fn at(text, x, y) -> {
+    curses_move(y, x)
+    curses_print(to_string(text))
+    curses_reset()
+    << text
 }
 
 #=======================================================
 #                       Lignes
 #=======================================================
-fn line_h(x, y, len) -> {
-    move(x, y)
-    print(repeat("─", len))
-}
 
-fn line_v(x, y, len) -> {
+fn line_h(x, y, len, c) -> {
+
     i = 0
+
+    curses_set_color(c, 0)
+
     while i < len -> {
-        move(x, y + i)
-        print("│")
+
+        curses_move(y, x + i)
+        curses_print("─")
+
         i++
     }
+
+    curses_reset()
+    << 0
+}
+
+fn line_v(x, y, len, c) -> {
+
+    i = 0
+
+    curses_set_color(c, 0)
+
+    while i < len -> {
+
+        curses_move(y + i, x)
+        curses_print("│")
+
+        i++
+    }
+
+    curses_reset()
+    << 0
+}
+
+#=======================================================
+#                       Box
+#=======================================================
+
+fn box(x, y, w, h, border, bg, title) -> {
+
+    i = 0
+
+    curses_set_color(border, 0)
+    curses_move(y, x)
+    curses_print("┌")
+
+    inner_w = w - 2
+
+    if title != "" -> {
+
+        title_len = str_len(title)
+
+        start = (inner_w - title_len) / 2
+
+        i = 0
+        while i < start -> {
+            curses_print("─")
+            i++
+        }
+
+        curses_print(title)
+
+        i = 0
+        while i < (inner_w - start - title_len) -> {
+            curses_print("─")
+            i++
+        }
+    }
+    else -> {
+
+        i = 0
+        while i < inner_w -> {
+            curses_print("─")
+            i++
+        }
+    }
+
+    curses_print("┐")
+
+    i = 0
+    while i < h - 2 -> {
+
+        curses_move(y + i + 1, x)
+        curses_print("│")
+
+        j = 0
+        while j < w - 2 -> {
+
+            if bg != 0 -> {
+                curses_set_color(bg, 0)
+                curses_print(" ")
+                curses_set_color(border, 0)
+            }
+            else -> {
+                curses_print(" ")
+            }
+
+            j++
+        }
+
+        curses_print("│")
+
+        i++
+    }
+
+    curses_move(y + h - 1, x)
+    curses_print("└")
+
+    i = 0
+    while i < w - 2 -> {
+        curses_print("─")
+        i++
+    }
+
+    curses_print("┘")
+
+    curses_reset()
+    << 0
 }
