@@ -24,6 +24,18 @@ fn clear() -> {
     << 0
 }
 
+fn start() -> {
+    ui_begin()
+}
+
+fn end() -> {
+    ui_end()
+}
+
+fn run() -> {
+    ui_run()
+}
+
 fn wait_key() -> << curses_getch()
 
 #=======================================================
@@ -51,15 +63,15 @@ WHITE   = 7
 
 
 fn success(text) -> {
-    text | green()
+    green(text)
 }
 
 fn error(text) -> {
-    text | red() | bold()
+    bold(red(text))
 }
 
 fn info(text) -> {
-    text | cyan()
+    cyan(text)
 }
 
 # IMPORTANT : cette focntion est pour le rendu sans pipeline
@@ -83,7 +95,6 @@ fn text(x, y, content, color) -> {
 fn at(text, x, y) -> {
     curses_move(y, x)
     curses_print(to_string(text))
-    curses_reset()
     << text
 }
 
@@ -151,13 +162,13 @@ fn box_push(box_id, value) -> {
     ui_push(box_id, value)
 }
 
-fn textbox(x, y, width, color, title, align) -> {
-    << ui_input(
-        x,
-        y,
-        width,
-        color,
-        title,
-        align
-    )
+fn textbox(x, y, w, h, color, title, align) -> {
+    << ui_textbox(x, y, w, h, color, title, align)
+}
+
+# ===========================
+#       Labels
+# ===========================
+fn label(x,y,text) -> {
+    ui_label(x,y,text)
 }

@@ -207,13 +207,18 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
         if(!at_end() && peek().value == "(")
         {
             consume();
+
             auto node = std::make_unique<FuncCall>();
             node->name = name;
+
             while(!at_end() && peek().value != ")")
             {
-                node->args.push_back(parse_expr());
-                if(!at_end() && peek().value == ",") consume();
+                node->args.push_back(parse_pipeline());
+
+                if(!at_end() && peek().value == ",")
+                    consume();
             }
+
             consume();
             return node;
         }
@@ -245,7 +250,7 @@ std::unique_ptr<ASTNode> Parser::parse_primary()
     else if(peek().type == TokenType::PUNCTUATOR && peek().value == "(")
     {
         consume();
-        auto expr = parse_expr();
+        auto expr = parse_pipeline();
         consume();
         return expr;
     }
@@ -495,7 +500,7 @@ std::unique_ptr<ASTNode> Parser::parse_funccall()
     consume();
     while(!at_end() && peek().value != ")")
     {
-        node->args.push_back(parse_cond());
+        node->args.push_back(parse_pipeline());
         if(!at_end() && peek().value == ",") consume();
     }
     consume();
