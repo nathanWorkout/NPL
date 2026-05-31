@@ -50,40 +50,16 @@ CYAN    = 6
 WHITE   = 7
 
 
-# IMPORTANT : ces fonciton sont pour le rendu avec pipeline
-fn red(text) -> {
-    curses_set_color(RED, 0)
-    << text
+fn success(text) -> {
+    text | green()
 }
 
-fn green(text) -> {
-    curses_set_color(GREEN, 0)
-    << text
+fn error(text) -> {
+    text | red() | bold()
 }
 
-fn yellow(text) -> {
-    curses_set_color(YELLOW, 0)
-    << text
-}
-
-fn blue(text) -> {
-    curses_set_color(BLUE, 0)
-    << text
-}
-
-fn magenta(text) -> {
-    curses_set_color(MAGENTA, 0)
-    << text
-}
-
-fn cyan(text) -> {
-    curses_set_color(CYAN, 0)
-    << text
-}
-
-fn white(text) -> {
-    curses_set_color(WHITE, 0)
-    << text
+fn info(text) -> {
+    text | cyan()
 }
 
 # IMPORTANT : cette focntion est pour le rendu sans pipeline
@@ -154,85 +130,34 @@ fn line_v(x, y, len, c) -> {
 #=======================================================
 #                       Box
 #=======================================================
+# ui_box alignement
+LEFT = 0
+CENTER = 1
+RIGHT = 2
 
-fn box(x, y, w, h, border, bg, title) -> {
+fn box(x, y, w, h, color, title, align) -> {
+    << ui_box(
+        x,
+        y,
+        w,
+        h,
+        color,
+        title,
+        align
+    )
+}
 
-    i = 0
+fn box_push(box_id, value) -> {
+    ui_push(box_id, value)
+}
 
-    curses_set_color(border, 0)
-    curses_move(y, x)
-    curses_print("┌")
-
-    inner_w = w - 2
-
-    if title != "" -> {
-
-        title_len = str_len(title)
-
-        start = (inner_w - title_len) / 2
-
-        i = 0
-        while i < start -> {
-            curses_print("─")
-            i++
-        }
-
-        curses_print(title)
-
-        i = 0
-        while i < (inner_w - start - title_len) -> {
-            curses_print("─")
-            i++
-        }
-    }
-    else -> {
-
-        i = 0
-        while i < inner_w -> {
-            curses_print("─")
-            i++
-        }
-    }
-
-    curses_print("┐")
-
-    i = 0
-    while i < h - 2 -> {
-
-        curses_move(y + i + 1, x)
-        curses_print("│")
-
-        j = 0
-        while j < w - 2 -> {
-
-            if bg != 0 -> {
-                curses_set_color(bg, 0)
-                curses_print(" ")
-                curses_set_color(border, 0)
-            }
-            else -> {
-                curses_print(" ")
-            }
-
-            j++
-        }
-
-        curses_print("│")
-
-        i++
-    }
-
-    curses_move(y + h - 1, x)
-    curses_print("└")
-
-    i = 0
-    while i < w - 2 -> {
-        curses_print("─")
-        i++
-    }
-
-    curses_print("┘")
-
-    curses_reset()
-    << 0
+fn textbox(x, y, width, color, title, align) -> {
+    << ui_input(
+        x,
+        y,
+        width,
+        color,
+        title,
+        align
+    )
 }

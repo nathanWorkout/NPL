@@ -14,98 +14,207 @@ namespace runtime {
     struct Box {
         int x, y, w, h;
         int border;
+        int align;
         std::string title;
+
+        std::vector<Value> content;
+        int scroll = 0;
     };
 
-    static std::vector<Box> ui_boxes;
-    static int ui_focus = 0;
-    static bool ui_running = false;
-    static std::vector<std::string> feed_lines;
+    // Coordonées
+    static int ui_percent(
+        const Value& v,
+        int total
+    ) {
+        if (v.type == Value::Type::String || v.type == Value::Type::STYLED_TEXT) {
 
-    static void draw_feed(
+            std::string s = v.to_display();
+
+            if (!s.empty() && s.back() == '%') {
+                try {
+                    int percent = std::stoi(s.substr(0, s.size() - 1));
+                    return (total * percent) / 100;
+                } catch (...) {
+                    return 0;
+                }
+            }
+        }
+
+        return (int)v.num;
+    }
+
+    static int ui_x(const Value& v)
+    {
+        int h,w;
+        getmaxyx(stdscr,h,w);
+
+        return ui_percent(v,w);
+    }
+
+    static int ui_y(const Value& v)
+    {
+        int h,w;
+        getmaxyx(stdscr,h,w);
+
+        return ui_percent(v,h);
+    }
+
+    static int ui_w(const Value& v)
+    {
+        int h,w;
+        getmaxyx(stdscr,h,w);
+        return ui_percent(v,w);
+    }
+
+    static int ui_h(const Value& v)
+    {
+        int h,w;
+        getmaxyx(stdscr,h,w);
+        return ui_percent(v,h);
+    }
+
+    static void draw_box(
         int x,
         int y,
         int w,
         int h,
-        const std::vector<std::string>& items,
-        int border,
-        const std::string& title
+        int color,
+        const std::string& title,
+        int align
     ) {
-        attron(COLOR_PAIR(border));
+        if(w < 2 || h < 2) return;
+        attron(COLOR_PAIR(color));
 
-        mvprintw(y, x, "┌");
-        mvprintw(y, x + w - 1, "┐");
-        mvprintw(y + h - 1, x, "└");
-        mvprintw(y + h - 1, x + w - 1, "┘");
+        mvprintw(y, x, "╭");
+        mvprintw(y, x + w - 1, "╮");
+        mvprintw(y + h - 1, x, "╰");
+        mvprintw(y + h - 1, x + w - 1, "╯");
 
-        for (int i = 1; i < w - 1; i++) {
+        for(int i = 1; i < w - 1; i++) {
             mvprintw(y, x + i, "─");
             mvprintw(y + h - 1, x + i, "─");
         }
 
-        for (int i = 1; i < h - 1; i++) {
+        for(int i = 1; i < h - 1; i++) {
             mvprintw(y + i, x, "│");
             mvprintw(y + i, x + w - 1, "│");
         }
 
-        if (!title.empty()) {
-            int start = (w - 2 - (int)title.size()) / 2;
-            if (start < 1) start = 1;
-            mvprintw(y, x + start, "%s", title.c_str());
-        }
+        if(!title.empty()) {
 
-        attroff(COLOR_PAIR(border));
+            std::string label = "[ " + title + " ]";
 
-        int visible = h - 2;
-        int start = std::max(0, (int)items.size() - visible);
+            int start;
 
-        for (int i = start; i < (int)items.size(); i++) {
-            int line = i - start;
+            switch(align) {
 
-            std::string msg = items[i];
-            if ((int)msg.size() > w - 2)
-                msg = msg.substr(0, w - 3);
+                case 0: // gauche
+                    start = 2;
+                    break;
 
-            mvprintw(y + 1 + line, x + 1, "%s", msg.c_str());
-        }
-    }
+                case 2: // droite
+                    start = w - (int)label.size() - 2;
+                    break;
 
-    static void draw_frame(const Box& b, bool focus)
-    {
-        int c = focus ? 7 : b.border;
+                default: // centre
+                    start = (w - (int)label.size()) / 2;
+                    break;
+            }
 
-        attron(COLOR_PAIR(c));
-
-        mvprintw(b.y, b.x, "┌");
-        mvprintw(b.y, b.x + b.w - 1, "┐");
-        mvprintw(b.y + b.h - 1, b.x, "└");
-        mvprintw(b.y + b.h - 1, b.x + b.w - 1, "┘");
-
-        for (int i = 1; i < b.w - 1; i++) {
-            mvprintw(b.y, b.x + i, "─");
-            mvprintw(b.y + b.h - 1, b.x + i, "─");
-        }
-
-        for (int i = 1; i < b.h - 1; i++) {
-            mvprintw(b.y + i, b.x, "│");
-            mvprintw(b.y + i, b.x + b.w - 1, "│");
-        }
-
-        if (!b.title.empty()) {
-            int start = (b.w - 2 - (int)b.title.size()) / 2;
-
-            if (start < 1)
+            if(start < 1)
                 start = 1;
 
             mvprintw(
-                b.y,
-                b.x + start,
+                y,
+                x + start,
                 "%s",
-                b.title.c_str()
+                label.c_str()
             );
         }
 
-        attroff(COLOR_PAIR(c));
+        attroff(COLOR_PAIR(color));
+    }
+
+    static std::vector<Box> ui_boxes;
+    static int ui_focus = 0;
+    static bool ui_running = false;
+
+    static void draw_frame(Box& b, bool focus)
+    {
+        int c = focus ? 7 : b.border;
+
+        draw_box(
+            b.x,
+            b.y,
+            b.w,
+            b.h,
+            c,
+            b.title,
+            b.align
+        );
+
+        int visible = std::max(0, b.h - 2);
+        int start = std::max(
+            0,
+            (int)b.content.size() - visible - b.scroll
+        );
+
+        for (
+            int i = start;
+            i < (int)b.content.size() &&
+            (i - start) < visible;
+            i++
+        ) {
+
+            int line = i - start;
+
+            const Value& msg = b.content[i];
+
+            std::string text =
+                msg.type == Value::Type::STYLED_TEXT
+                ? msg.styled->text
+                : msg.to_display();
+
+            if ((int)text.size() > b.w - 2)
+                text = text.substr(0, b.w - 3);
+
+            if (msg.type == Value::Type::STYLED_TEXT) {
+
+                attron(
+                    COLOR_PAIR(
+                        msg.styled->color
+                    )
+                );
+
+                if(msg.styled->style & 1)
+                    attron(A_BOLD);
+
+                mvprintw(
+                    b.y + 1 + line,
+                    b.x + 1,
+                    "%s",
+                    text.c_str()
+                );
+
+                if(msg.styled->style & 1)
+                    attroff(A_BOLD);
+
+                attroff(
+                    COLOR_PAIR(
+                        msg.styled->color
+                    )
+                );
+            }
+            else {
+
+                mvprintw(
+                    b.y + 1 + line,
+                    b.x + 1,
+                    "%s",
+                    text.c_str()
+                );
+            }
+        }
     }
 
     void register_tui_functions(Interpreter& interp) {
@@ -211,6 +320,7 @@ namespace runtime {
 
         interp.register_native("curses_set_color", [](std::vector<Value> args) {
             int color = (int)args[0].num;
+            if (args.empty()) throw std::runtime_error("curses_set_color(color, style?) attend au moins 1 argument");
             int style = args.size() > 1 ? (int)args[1].num : 0;
 
             if (current_style & 1)  wattroff(stdscr, A_BOLD);
@@ -283,18 +393,21 @@ namespace runtime {
         });
 
         interp.register_native("ui_box", [](std::vector<Value> args) {
-            if (args.size() < 6) throw std::runtime_error("ui_box(x,y,w,h,color,title)");
+
+            if(args.size() < 7) throw std::runtime_error("ui_box(x,y,w,h,color,title,align)");
 
             Box b;
-            b.x = (int)args[0].num;
-            b.y = (int)args[1].num;
-            b.w = (int)args[2].num;
-            b.h = (int)args[3].num;
+            b.x = ui_x(args[0]);
+            b.y = ui_y(args[1]);
+            b.w = ui_w(args[2]);
+            b.h = ui_h(args[3]);
             b.border = (int)args[4].num;
             b.title = args[5].to_display();
+            b.align = (int)args[6].num;
 
             ui_boxes.push_back(b);
-            return Value::null();
+
+            return Value::from_num(ui_boxes.size() - 1);
         });
 
         interp.register_native("ui_focus", [](std::vector<Value> args) {
@@ -321,27 +434,44 @@ namespace runtime {
 
                     case KEY_LEFT:
                         ui_focus--;
-                        if (ui_focus < 0)
-                            ui_focus = (int)ui_boxes.size() - 1;
+                        if (ui_focus < 0) ui_focus = (int)ui_boxes.size() - 1;
                         break;
 
                     case KEY_UP:
                         ui_focus--;
-                        if (ui_focus < 0)
-                            ui_focus = (int)ui_boxes.size() - 1;
+                        if (ui_focus < 0) ui_focus = (int)ui_boxes.size() - 1;
                         break;
 
                     case KEY_RIGHT:
                         ui_focus++;
-                        if (ui_focus >= (int)ui_boxes.size())
-                            ui_focus = 0;
+                        if (ui_focus >= (int)ui_boxes.size()) ui_focus = 0;
                         break;
 
                     case KEY_DOWN:
                         ui_focus++;
-                        if (ui_focus >= (int)ui_boxes.size())
-                            ui_focus = 0;
+                        if (ui_focus >= (int)ui_boxes.size()) ui_focus = 0;
                         break;
+
+                        case KEY_PPAGE: {
+
+                            int max_scroll =
+                                std::max(
+                                    0,
+                                    (int)ui_boxes[ui_focus].content.size()
+                                    -
+                                    (ui_boxes[ui_focus].h - 2)
+                                );
+
+                            if(ui_boxes[ui_focus].scroll < max_scroll)
+                                ui_boxes[ui_focus].scroll++;
+
+                            break;
+                        }
+
+                        case KEY_NPAGE:
+                            ui_boxes[ui_focus].scroll--;
+                            if(ui_boxes[ui_focus].scroll < 0) ui_boxes[ui_focus].scroll = 0;
+                            break;
 
                     case 'q':
                         ui_running = false;
@@ -359,6 +489,34 @@ namespace runtime {
             return Value::null();
         });
 
+        interp.register_native("ui_push", [](std::vector<Value> args) {
+
+            if(args.size() < 2) throw std::runtime_error("ui_push(box,value)");
+
+            int id = (int)args[0].num;
+            Value v = args[1];
+
+            if (id < 0 || id >= (int)ui_boxes.size())
+                return Value::null();
+
+            ui_boxes[id].content.push_back(v);
+
+            return Value::null();
+        });
+
+        interp.register_native("ui_draw", [](std::vector<Value>) {
+
+            clear();
+
+            for (size_t i = 0; i < ui_boxes.size(); i++) {
+                draw_frame(ui_boxes[i], i == (size_t)ui_focus);
+            }
+
+            refresh();
+
+            return Value::null();
+        });
+
         interp.register_native("ui_end", [](std::vector<Value> args) {
             ui_boxes.clear();
             ui_focus = 0;
@@ -370,17 +528,16 @@ namespace runtime {
         //                  Feed / log view
         // =================================================
 
-        interp.register_native("input", [](std::vector<Value> args) {
+        interp.register_native("ui_input", [](std::vector<Value> args) {
 
-            if (args.size() < 4)
-                throw std::runtime_error(
-                    "input(x,y,width,color)"
-                );
+            if (args.size() < 6) throw std::runtime_error( "ui_input(x,y,width,color,title,align)");
 
-            int x = (int)args[0].num;
-            int y = (int)args[1].num;
-            int width = (int)args[2].num;
+            int x = ui_x(args[0]);
+            int y = ui_y(args[1]);
+            int w = ui_w(args[2]);
             int color = (int)args[3].num;
+            std::string title = args[4].to_display();
+            int align = (int)args[5].num;
 
             std::string buffer;
 
@@ -388,24 +545,15 @@ namespace runtime {
 
             while (true) {
 
-
-                attron(COLOR_PAIR(color));
-
-                mvprintw(y, x, "┌");
-                mvprintw(y, x + width - 1, "┐");
-
-                for (int i = 1; i < width - 1; i++) {
-                    mvprintw(y, x + i, "─");
-                    mvprintw(y + 2, x + i, "─");
-                }
-
-                mvprintw(y + 2, x, "└");
-                mvprintw(y + 2, x + width - 1, "┘");
-
-                mvprintw(y + 1, x, "│");
-                mvprintw(y + 1, x + width - 1, "│");
-
-                attroff(COLOR_PAIR(color));
+                draw_box(
+                    x,
+                    y,
+                    w,
+                    3,
+                    color,
+                    title,
+                    align
+                );
 
                 mvprintw(y + 1, x + 2, "> %s", buffer.c_str());
 
@@ -422,8 +570,7 @@ namespace runtime {
                     if (!buffer.empty())
                         buffer.pop_back();
                 } else if (isprint(key)) {
-                    if ((int)buffer.size() < width - 6)
-                        buffer.push_back((char)key);
+                    if ((int)buffer.size() < w - 6) buffer.push_back((char)key);
                 }
             }
 
@@ -432,60 +579,71 @@ namespace runtime {
             return Value::from_str(buffer);
         });
 
-        interp.register_native("feed_draw", [](std::vector<Value> args) {
 
-            if (args.size() < 6)
-                throw std::runtime_error(
-                    "feed_draw(x,y,w,h,color,title)"
-                );
 
-            int x = (int)args[0].num;
-            int y = (int)args[1].num;
-            int w = (int)args[2].num;
-            int h = (int)args[3].num;
-
-            int color = (int)args[4].num;
-
-            std::string title =
-                args[5].to_display();
-
-            draw_feed(
-                x,
-                y,
-                w,
-                h,
-                feed_lines,
-                color,
-                title
-            );
-
-            return Value::null();
+        // =======================================================
+        //                      Couleurs
+        // =======================================================
+        interp.register_native("red", [](std::vector<Value> args) {
+            return Value::from_styled(args[0].to_display(), 1, 0);
         });
 
-        interp.register_native("feed_push", [](std::vector<Value> args) {
-
-            if(args.size() < 1)
-                throw std::runtime_error("feed_push(text)");
-
-            feed_lines.push_back(
-                args[0].to_display()
-            );
-
-            return Value::null();
+        interp.register_native("green", [](std::vector<Value> args) {
+            return Value::from_styled(args[0].to_display(), 2, 0);
         });
 
-        interp.register_native("feed_clear", [](std::vector<Value>) {
-
-            feed_lines.clear();
-
-            return Value::null();
+        interp.register_native("yellow", [](std::vector<Value> args) {
+            return Value::from_styled(args[0].to_display(), 3, 0);
         });
 
-        interp.register_native("feed_count", [](std::vector<Value>) {
+        interp.register_native("blue", [](std::vector<Value> args) {
+            return Value::from_styled(args[0].to_display(), 4, 0);
+        });
 
-            return Value::from_num(
-                feed_lines.size()
+        interp.register_native("magenta", [](std::vector<Value> args) {
+            return Value::from_styled(args[0].to_display(), 5, 0);
+        });
+
+        interp.register_native("cyan", [](std::vector<Value> args) {
+            return Value::from_styled(args[0].to_display(), 6, 0);
+        });
+
+        interp.register_native("white", [](std::vector<Value> args) {
+            return Value::from_styled(args[0].to_display(), 7, 0);
+        });
+
+        // Style
+        interp.register_native("bold", [](std::vector<Value> args) {
+
+            Value v = args[0];
+
+            if(v.type == Value::Type::STYLED_TEXT) {
+                v.styled->style |= 1;
+                return v;
+            }
+
+            return Value::from_styled(
+                v.to_display(),
+                0,
+                1
             );
+        });
+
+        // Tiling en pourcentage
+        interp.register_native("screen_width", [](std::vector<Value>) {
+
+            int h, w;
+            getmaxyx(stdscr, h, w);
+
+            return Value::from_num(w);
+        });
+
+        interp.register_native("screen_height", [](std::vector<Value>) {
+
+            int h, w;
+            getmaxyx(stdscr, h, w);
+
+            return Value::from_num(h);
         });
     }
 

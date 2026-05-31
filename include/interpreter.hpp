@@ -13,14 +13,35 @@
 #include "parser.hpp"
 #include "lexer.hpp"
 
+struct StyledText {
+    std::string text;
+    int color = 0;
+    int style = 0;
+};
+
+
 struct Value
 {
-    enum class Type { Number, String, Bool, Array, Map, Null, Function } type = Type::Null;
+    enum class Type { Number, String, Bool, Array, Map, Null, Function, STYLED_TEXT } type = Type::Null;
     double num  = 0.0;
     std::string str;
     bool flag = false;
     std::vector<Value> arr;
     std::unordered_map<std::string, Value> map;
+    std::shared_ptr<StyledText> styled;
+
+    static Value from_styled(const std::string& text, int color, int style) {
+        Value v;
+        v.type = Type::STYLED_TEXT;
+
+        v.styled = std::make_shared<StyledText>();
+
+        v.styled->text = text;
+        v.styled->color = color;
+        v.styled->style = style;
+
+        return v;
+    }
 
     // permettre l'appel de focntion dans les arguments des fonctions
     struct {
@@ -45,13 +66,14 @@ struct Value
     // retourne vrai ou faux
     bool truthy() const {
         switch(type){
-            case Type::Number: return num != 0.0;
-            case Type::String: return !str.empty();
-            case Type::Bool:   return flag;
-            case Type::Array:  return !arr.empty();
-            case Type::Map:    return !map.empty();
-            case Type::Function: return true;
-            case Type::Null:   return false;
+            case Type::Number:      return num != 0.0;
+            case Type::String:      return !str.empty();
+            case Type::Bool:        return flag;
+            case Type::Array:       return !arr.empty();
+            case Type::Map:         return !map.empty();
+            case Type::Function:    return true;
+            case Type::STYLED_TEXT: return !styled->text.empty();
+            case Type::Null:        return false;
         }
         return false;
     }
@@ -106,12 +128,15 @@ struct Value
             }
             case Type::Function: return "function";
 
+            case Type::STYLED_TEXT: return styled->text;
+
             case Type::Null: return "null";
         }
         return "";
     }
-};
 
+
+};
 // quand il y a un return,  -> exeption -> transporte la value
 struct ReturnException {
     Value value;
