@@ -1,5 +1,3 @@
-use tui/ncurse
-
 connect_handler = null
 data_handler = null
 disconnect_handler = null
@@ -50,6 +48,5 @@ fn serve(port) -> {
                 if disconnect_handler != null -> disconnect_handler(client)
             }
         }
-        poll()
     }
 }
