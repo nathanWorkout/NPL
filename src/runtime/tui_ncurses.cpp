@@ -6,6 +6,7 @@
 #include <cctype>
 #include <locale.h>
 #include <string>
+#include <sstream>
 
 namespace runtime {
 
@@ -43,6 +44,30 @@ namespace runtime {
 
     static std::vector<Label> ui_labels;
 
+    struct List {
+        int x, y, w, h;
+        int color;
+        int align;
+        std::string title;
+        std::vector<Value> items;
+
+        int selected = 0;
+        int scroll = 0;
+
+        std::string submit;
+    };
+
+    static std::vector<List> ui_lists;
+    static int ui_list_focus = 0;
+
+    struct StatusItem {
+        std::string key;
+        Value value;
+        int bg_color = 0;
+    };
+
+    static std::vector<StatusItem> ui_statusbar;
+
     // Coordonées
     static int ui_percent(const Value& v, int total) {
         if (total <= 0) return 1;
@@ -52,7 +77,7 @@ namespace runtime {
                 try {
                     int percent = std::stoi(s.substr(0, s.size() - 1));
                     int result = (total * percent) / 100;
-                    return std::max(1, result);
+                    return std::max(0, result);
                 } catch (...) {
                     // conversion échouée
                     return 1;
@@ -104,6 +129,17 @@ namespace runtime {
         int align,
         bool focus
     ) {
+
+        int maxy, maxx;
+        getmaxyx(stdscr, maxy, maxx);
+
+        if (x < 0 || y < 0) return;
+        if (x >= maxx || y >= maxy) return;
+
+        w = std::min(w, maxx - x);
+        h = std::min(h, maxy - y);
+
+        if (w < 2 || h < 2) return;
 
         if (focus) attron(A_BOLD);
 
@@ -176,16 +212,34 @@ namespace runtime {
 
         attron(COLOR_PAIR(t.color));
         if (focus) attron(A_BOLD);
-        mvprintw(t.y + 1, t.x + 1, "%s", buffer_display.c_str());
+        std::stringstream ss(buffer_display);
+        std::string line;
+
+        int row = 0;
+
+        while(std::getline(ss, line) && row < t.h - 2) {
+            mvprintw(
+                t.y + 1 + row,
+                t.x + 1,
+                "%.*s",
+                t.w - 2,
+                line.c_str()
+            );
+            row++;
+        }
+
         if (focus) attroff(A_BOLD);
         attroff(COLOR_PAIR(t.color));
 
         // Positionner le curseur si focus
         if (focus) {
-            int cx = t.x + 2 + (int)t.buffer.size();
-            int maxx = getmaxx(stdscr);
-            cx = std::clamp(cx, 0, maxx - 1);
-            move(t.y + 1, cx);
+
+            int cx = t.x + 3 + (int)t.buffer.size();
+            cx = std::min(cx, t.x + t.w - 2);
+
+            attron(COLOR_PAIR(t.color));
+            mvaddch(t.y + 1, cx, '_');
+            attroff(COLOR_PAIR(t.color));
         }
     }
 
@@ -226,12 +280,106 @@ namespace runtime {
         }
     }
 
+    static void draw_list(List& l, bool focus)
+    {
+        if (focus) attron(A_BOLD);
+        draw_box(
+            l.x,
+            l.y,
+            l.w,
+            l.h,
+            l.color,
+            l.title,
+            l.align,
+            focus
+        );
+
+        int visible = l.h - 2;
+
+        int start =
+            std::max(
+                0,
+                l.selected - visible + 1
+            );
+
+        for(
+            int i = start;
+            i < (int)l.items.size() &&
+            i < start + visible;
+            i++
+        )
+        {
+            std::string text = l.items[i].to_display();
+
+            bool selected = (i == l.selected);
+            if (selected) attron(A_REVERSE);
+
+            mvprintw(
+                l.y + 1 + (i - start),
+                l.x + 1,
+                "%.*s",
+                l.w - 2,
+                text.c_str()
+            );
+
+
+            if (selected) attroff(A_REVERSE);
+        }
+
+
+        if (focus) attroff(A_BOLD);
+    }
+
+    static void draw_statusbar()
+    {
+        int h, w;
+        getmaxyx(stdscr, h, w);
+
+        int y = h - 1;
+
+        int x = 0;
+
+        //attron(A_REVERSE);
+        mvhline(y, 0, ' ', w);
+        //attroff(A_REVERSE);
+
+        for (size_t i = 0; i < ui_statusbar.size(); i++) {
+
+            auto& item = ui_statusbar[i];
+
+            std::string text = " " + item.key + ": " + item.value.to_display() + " ";
+
+            int len = text.size();
+
+            if (x + len >= w) break;
+
+            if (item.bg_color > 0) attron(COLOR_PAIR(item.bg_color));
+
+            for (int i = 0; i < len; i++) {
+                mvaddch(y, x + i, ' ');
+            }
+
+            mvprintw(y, x, "%s", text.c_str());
+
+            if (item.bg_color > 0)
+                attroff(COLOR_PAIR(item.bg_color));
+
+            x += len;
+
+            if (x < w - 1) {
+                mvaddch(y, x, ' ');
+                x += 1;
+            }
+        }
+    }
+
     static std::vector<Box> ui_boxes;
     static int ui_focus = 0;
     static bool ui_running = false;
     static bool ui_input_mode = true;
     static bool ui_has_focus = false;
     static bool ui_focus_on_boxes = true;
+    static bool ui_focus_on_lists = false;
     static std::string ui_input_buffer;
     static std::string ui_input_submit;
 
@@ -239,55 +387,84 @@ namespace runtime {
         int key = getch();
         if (key == ERR) return "";
 
-        // Touche Tab : basculer entre les deux groupes (textbox vs box)
-        if (key == '\t' || key == KEY_BTAB) {
-            ui_focus_on_boxes = !ui_focus_on_boxes;
+        if (key == '\t') {
+
+            if (ui_focus_on_boxes) {
+                ui_focus_on_boxes = false;
+                ui_focus_on_lists = true;
+            }
+            else if (ui_focus_on_lists) {
+                ui_focus_on_lists = false;
+            }
+            else {
+                ui_focus_on_boxes = true;
+            }
+
             return "";
+        }
+
+        if (ui_focus_on_lists && !ui_lists.empty()) {
+            ui_list_focus = std::clamp(ui_list_focus, 0, (int)ui_lists.size() - 1);
         }
 
         if (ui_focus_on_boxes) {
-            // Navigation entre box
-            if (key == KEY_LEFT || key == KEY_UP) {
-                if (!ui_boxes.empty())
-                    ui_focus = (ui_focus - 1 + (int)ui_boxes.size()) % ui_boxes.size();
-            } else if (key == KEY_RIGHT || key == KEY_DOWN) {
-                if (!ui_boxes.empty())
+            if (!ui_boxes.empty()) {
+                if (key == KEY_LEFT || key == KEY_UP)
+                    ui_focus = (ui_focus - 1 + ui_boxes.size()) % ui_boxes.size();
+
+                else if (key == KEY_RIGHT || key == KEY_DOWN)
                     ui_focus = (ui_focus + 1) % ui_boxes.size();
             }
             return "";
-        } else {
-            // Focus sur les textboxes
-            if (ui_textboxes.empty()) {
-                ui_focus_on_boxes = true;   // basculer automatiquement si aucune textbox
-                return "";
-            }
-
-            ui_textbox_focus = std::clamp(ui_textbox_focus, 0, (int)ui_textboxes.size() - 1);
-            TextBox& t = ui_textboxes[ui_textbox_focus];
-
-            if (t.w < 4) return "";
-
-            std::string output = "";
-
-            if (key == KEY_UP || key == KEY_LEFT)
-                ui_textbox_focus = std::max(0, ui_textbox_focus - 1);
-            else if (key == KEY_DOWN || key == KEY_RIGHT)
-                ui_textbox_focus = std::min((int)ui_textboxes.size() - 1, ui_textbox_focus + 1);
-            else if (key == '\n' || key == KEY_ENTER) {
-                output = t.buffer;
-                t.submit = output;
-                t.buffer.clear();
-            }
-            else if (key == KEY_BACKSPACE || key == 127 || key == 8) {
-                if (!t.buffer.empty()) t.buffer.pop_back();
-            }
-            else if (isprint(key)) {
-                if ((int)t.buffer.size() < t.w - 4)
-                    t.buffer.push_back((char)key);
-            }
-
-            return output;
         }
+
+        if (ui_textboxes.empty()) return "";
+
+        TextBox& t = ui_textboxes[ui_textbox_focus];
+
+        if (ui_focus_on_lists && !ui_lists.empty()) {
+
+            auto& l = ui_lists[ui_list_focus];
+
+            if (key == KEY_UP) l.selected = std::max(0, l.selected - 1);
+
+            else if (key == KEY_DOWN) l.selected = std::min((int)l.items.size() - 1, l.selected + 1);
+
+            else if (key == '\n') l.submit = l.items[l.selected].to_display();
+
+            else if (key == KEY_LEFT) ui_list_focus = std::max(0, ui_list_focus - 1);
+
+            else if (key == KEY_RIGHT) ui_list_focus = std::min((int)ui_lists.size() - 1, ui_list_focus + 1);
+
+            return "";
+        }
+
+        if (key == KEY_UP || key == KEY_LEFT)
+            ui_textbox_focus = std::max(0, ui_textbox_focus - 1);
+
+        else if (key == KEY_DOWN || key == KEY_RIGHT)
+            ui_textbox_focus = std::min((int)ui_textboxes.size() - 1,
+                                        ui_textbox_focus + 1);
+
+        else if (key == 4) { // Ctrl+D
+            t.submit = t.buffer;
+            t.buffer.clear();
+        }
+
+        else if (key == '\n') {
+            t.buffer.push_back('\n');
+        }
+
+        else if (key == KEY_BACKSPACE || key == 127 || key == 8) {
+            if (!t.buffer.empty())
+                t.buffer.pop_back();
+        }
+
+        else if (isprint(key)) {
+            t.buffer.push_back((char)key);
+        }
+
+        return "";
     }
 
     static void draw_frame(Box& b, bool focus)
@@ -369,7 +546,61 @@ namespace runtime {
         }
     }
 
+    static void ui_render()
+    {
+        erase();
+
+        for (size_t i = 0; i < ui_boxes.size(); ++i) {
+            bool is_focused =
+                ui_focus_on_boxes &&
+                (i == (size_t)ui_focus);
+
+            draw_frame(ui_boxes[i], is_focused);
+        }
+
+        for (const auto& l : ui_labels)
+            draw_label(l);
+
+        for (size_t i = 0; i < ui_textboxes.size(); ++i) {
+            bool is_focused =
+                !ui_focus_on_boxes &&
+                (i == (size_t)ui_textbox_focus);
+
+            draw_textbox(ui_textboxes[i], is_focused);
+        }
+
+        for(size_t i = 0; i < ui_lists.size(); i++) {
+            bool focused = ui_focus_on_lists && i == (size_t)ui_list_focus;
+            draw_list(ui_lists[i], focused);
+        }
+
+        draw_statusbar();
+        refresh();
+    }
+
     void register_tui_functions(Interpreter& interp) {
+
+    interp.register_native("status_set", [](std::vector<Value> args) {
+
+        if (args.size() < 2) throw std::runtime_error("status_set(key, value, bg_color?)");
+
+        std::string key = args[0].to_display();
+        Value val = args[1];
+
+        int bg = (args.size() >= 3) ? (int)args[2].num : 0;
+
+        for (auto& item : ui_statusbar) {
+            if (item.key == key) {
+                item.value = val;
+                item.bg_color = bg;
+                return Value::null();
+            }
+        }
+
+        ui_statusbar.push_back({key, val, bg});
+
+        return Value::null();
+    });
 
         interp.register_native("curses_init", [&](std::vector<Value> args) {
             setlocale(LC_ALL, "");
@@ -378,7 +609,7 @@ namespace runtime {
 
             nodelay(stdscr, TRUE);
             timeout(0);
-            leaveok(stdscr, TRUE);
+            leaveok(stdscr, FALSE);
 
             nodelay(stdscr, TRUE);
 
@@ -571,16 +802,27 @@ namespace runtime {
 
         interp.register_native("ui_box", [](std::vector<Value> args) {
 
-            if(args.size() < 7) throw std::runtime_error("ui_box(x,y,w,h,color,title,align)");
+            if(args.size() < 5)
+                throw std::runtime_error(
+                    "ui_box(x,y,w,h,color[,title,align])"
+                );
 
             Box b;
+
             b.x = ui_x(args[0]);
             b.y = ui_y(args[1]);
             b.w = ui_w(args[2]);
             b.h = ui_h(args[3]);
             b.border = (int)args[4].num;
-            b.title = args[5].to_display();
-            b.align = (int)args[6].num;
+
+            b.title = "";
+            b.align = 1; // CENTER
+
+            if(args.size() >= 6)
+                b.title = args[5].to_display();
+
+            if(args.size() >= 7)
+                b.align = (int)args[6].num;
 
             ui_boxes.push_back(b);
 
@@ -610,6 +852,7 @@ namespace runtime {
             ui_running = false;
             ui_textboxes.clear();
             ui_textbox_focus = 0;
+            ui_focus_on_boxes = true;
             return Value::null();
         });
 
@@ -618,51 +861,51 @@ namespace runtime {
         //                      Boucle de jeu
         // =======================================================
         interp.register_native("ui_run", [&](std::vector<Value>) {
+
             ui_running = true;
             timeout(0);
-            curs_set(0);
 
             while (ui_running) {
+
                 std::string textbox_result = ui_tick();
 
                 if (textbox_result == "quit")
                     ui_running = false;
 
-                // Curseur visible seulement si on est en mode textbox ET qu'il y a des textboxes
-                bool textbox_has_focus = !ui_focus_on_boxes && !ui_textboxes.empty();
-                curs_set(textbox_has_focus ? 1 : 0);
+                bool textbox_has_focus =
+                    !ui_focus_on_boxes &&
+                    !ui_textboxes.empty();
 
-                erase();
-
-                // Dessiner les boîtes : surbrillance seulement si mode boîtes ET focus correspond
-                for (size_t i = 0; i < ui_boxes.size(); ++i) {
-                    bool is_focused = ui_focus_on_boxes && (i == (size_t)ui_focus);
-                    draw_frame(ui_boxes[i], is_focused);
+                if (!ui_textboxes.empty()) {
+                    ui_textbox_focus =
+                        std::clamp(
+                            ui_textbox_focus,
+                            0,
+                            (int)ui_textboxes.size() - 1
+                        );
                 }
 
-                for (const auto& l : ui_labels) {
-                    draw_label(l);
-                }
+                curs_set(0);
 
-                // Dessiner les textbox : surbrillance seulement si mode textbox ET focus correspond
-                for (size_t i = 0; i < ui_textboxes.size(); ++i) {
-                    bool is_focused = !ui_focus_on_boxes && (i == (size_t)ui_textbox_focus);
-                    draw_textbox(ui_textboxes[i], is_focused);
-                }
+                ui_render();
 
-                // Positionner le curseur uniquement en mode textbox
-                if (textbox_has_focus) {
-                    TextBox& t = ui_textboxes[ui_textbox_focus];
-                    if (t.x >= 0 && t.y >= 0 && t.x < getmaxx(stdscr) && t.y < getmaxy(stdscr)) {
-                        int cx = t.x + 2 + (int)t.buffer.size();
-                        int maxx = getmaxx(stdscr);
-                        cx = std::clamp(cx, 0, maxx - 1);
-                        move(t.y + 1, cx);
-                    }
-                }
-
-                refresh();
+                napms(10);
             }
+
+            return Value::null();
+        });
+
+        interp.register_native("ui_stop", [](std::vector<Value>) {
+
+            ui_running = false;
+
+            return Value::null();
+        });
+
+        interp.register_native("ui_poll", [](std::vector<Value>) {
+
+            ui_tick();
+            ui_render();
 
             return Value::null();
         });
@@ -687,7 +930,25 @@ namespace runtime {
 
             if (ui_textboxes.size() == 1) ui_textbox_focus = 0;
 
-            return Value::null();
+            return Value::from_num(
+                ui_textboxes.size() - 1
+            );
+        });
+
+        interp.register_native("ui_textbox_read", [](std::vector<Value> args) {
+
+            if(args.size() < 1) throw std::runtime_error("ui_textbox_read(id)");
+
+            int id = (int)args[0].num;
+
+            if(id < 0 || id >= (int)ui_textboxes.size())
+                return Value::from_str("");
+
+            std::string result = ui_textboxes[id].submit;
+
+            ui_textboxes[id].submit.clear();
+
+            return Value::from_str(result);
         });
 
         // =======================================================
@@ -753,6 +1014,73 @@ namespace runtime {
             getmaxyx(stdscr, h, w);
 
             return Value::from_num(h);
+        });
+
+        // ======================================
+        //              LISTES
+        // ======================================
+        interp.register_native("ui_list", [](std::vector<Value> args) {
+
+            if(args.size() < 7)
+                throw std::runtime_error(
+                    "ui_list(x,y,w,h,color,title,align)"
+                );
+
+            List l;
+
+            l.x = ui_x(args[0]);
+            l.y = ui_y(args[1]);
+            l.w = ui_w(args[2]);
+            l.h = ui_h(args[3]);
+
+            l.color = (int)args[4].num;
+            l.title = args[5].to_display();
+            l.align = (int)args[6].num;
+
+            ui_lists.push_back(l);
+
+            return Value::from_num(
+                ui_lists.size() - 1
+            );
+        });
+
+
+        interp.register_native("ui_list_push", [](std::vector<Value> args) {
+
+            int id = (int)args[0].num;
+
+            if(id < 0 || id >= (int)ui_lists.size()) return Value::null();
+
+            ui_lists[id].items.push_back(args[1]);
+            return Value::null();
+        });
+
+        interp.register_native("ui_list_selected", [](std::vector<Value> args) {
+
+            int id = (int)args[0].num;
+
+            if(id < 0 || id >= (int)ui_lists.size()) return Value::null();
+
+            auto& l = ui_lists[id];
+
+            if(l.items.empty()) return Value::null();
+
+            return l.items[l.selected];
+        });
+
+        interp.register_native("ui_list_read", [](std::vector<Value> args) {
+
+            int id = (int)args[0].num;
+
+            if(id < 0 || id >= (int)ui_lists.size()) return Value::from_str("");
+
+            auto& l = ui_lists[id];
+
+            std::string result = l.submit;
+
+            l.submit.clear();
+
+            return Value::from_str(result);
         });
     }
 

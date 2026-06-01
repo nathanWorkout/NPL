@@ -36,6 +36,13 @@ fn run() -> {
     ui_run()
 }
 
+fn poll() -> {
+    ui_poll()
+}
+
+fn stop() -> {
+    ui_stop()
+}
 fn wait_key() -> << curses_getch()
 
 #=======================================================
@@ -55,7 +62,7 @@ fn black_background() -> {
 BLACK   = 0
 RED     = 1
 GREEN   = 2
-YELLOW  = 3
+ORANGE  = 3
 BLUE    = 4
 MAGENTA = 5
 CYAN    = 6
@@ -166,9 +173,32 @@ fn textbox(x, y, w, h, color, title, align) -> {
     << ui_textbox(x, y, w, h, color, title, align)
 }
 
+fn textbox_read(id) -> {
+    << ui_textbox_read(id)
+}
+
 # ===========================
 #       Labels
 # ===========================
 fn label(x,y,text) -> {
     ui_label(x,y,text)
+}
+
+# ===========================
+#       Listes
+# ===========================
+fn list(x, y, w, h, color, title, align) -> {
+    << ui_list(x, y, w, h, color, title, align)
+}
+
+fn list_push(id, value) -> {
+    ui_list_push(id, value)
+}
+
+fn list_selected(id) -> {
+    << ui_list_selected(id)
+}
+
+fn list_read(id) -> {
+    << ui_list_read(id)
 }
