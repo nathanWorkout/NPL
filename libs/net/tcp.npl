@@ -1,29 +1,55 @@
-use http/request
-use http/router
-use http/response
+use tui/ncurse
 
-fn listen(port) -> tcp_listen(port)
-fn accept(srv) -> tcp_accept(srv)
-fn read(fd) -> tcp_read(fd)
-fn write(fd, data) -> tcp_write(fd, data)
-fn close(fd) -> tcp_close(fd)
+connect_handler = null
+data_handler = null
+disconnect_handler = null
+
+fn on_connect(handler) -> {
+    connect_handler = handler
+}
+
+fn on_data(handler) -> {
+    data_handler = handler
+}
+
+fn on_disconnect(handler) -> {
+    disconnect_handler = handler
+}
+
+fn send(client, packet) -> {
+    tcp_write(client, packet)
+}
 
 fn serve(port) -> {
-    srv = listen(port)
-    if srv < 0 -> {
-        >> "Erreur: impossible d'écouter port " + port
-        << false
+
+    server = tcp_listen(port)
+
+    if server < 0 -> {
+        >> "error: cannot start server"
+        << null
     }
-    >> "Serveur NPL sur http://localhost:" + port
+
     while true -> {
-    client = accept(srv)
-    if client >= 0 -> {
-        raw = read(client)
-        req = parse_http(raw)
-        res = dispatch(req)
-        if res == null -> res = not_found()
-        write(client, res)
-        close(client)
+
+        events = tcp_poll(server)
+
+        events | each {
+            event = item
+            type = event["type"]
+            client = event["client"]
+
+            if type == "connect" -> {
+                if connect_handler != null -> connect_handler(client)
+            }
+
+            elif type == "data" -> {
+                if data_handler != null -> data_handler(client, event["data"])
+            }
+
+            elif type == "disconnect" -> {
+                if disconnect_handler != null -> disconnect_handler(client)
+            }
+        }
+        poll()
     }
-}
 }

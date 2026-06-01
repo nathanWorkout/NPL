@@ -5,13 +5,20 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cstring>
+#include <vector>
+#include <unordered_map>
+#include <fcntl.h>
 
 namespace runtime {
+
+static std::vector<int> tcp_clients;
+static std::unordered_map<int,int> tcp_servers;
 
 void register_net_functions(Interpreter& interp) {
     interp.register_native("tcp_listen", [](std::vector<Value> args) {
         int port = (int)args[0].num;
         int server_fd = socket(AF_INET, SOCK_STREAM, 0);
+        fcntl(server_fd, F_SETFL, O_NONBLOCK);
         if (server_fd < 0) return Value::from_num(-1);
 
         int opt = 1;
@@ -32,6 +39,8 @@ void register_net_functions(Interpreter& interp) {
             close(server_fd);
             return Value::from_num(-1);
         }
+        tcp_servers[server_fd] = 1;
+
         return Value::from_num(server_fd);
     });
 
@@ -61,6 +70,64 @@ void register_net_functions(Interpreter& interp) {
             sent += n;
         }
         return Value::from_bool(true);
+    });
+
+    interp.register_native("tcp_poll", [](std::vector<Value> args) {
+
+        int server_fd = (int)args[0].num;
+        Value events = Value::from_arr({});
+
+        while(true) {
+            int client = accept(server_fd, nullptr, nullptr);
+
+            if(client < 0) break;
+
+            fcntl(client, F_SETFL, O_NONBLOCK);
+            tcp_clients.push_back(client);
+
+            Value event = Value::from_map({});
+
+            event.map["type"] = Value::from_str("connect");
+            event.map["client"] = Value::from_num(client);
+            events.arr.push_back(event);
+        }
+
+        for(size_t i = 0; i < tcp_clients.size(); ) {
+
+            int client = tcp_clients[i];
+            char buffer[8192];
+            ssize_t n = recv(client, buffer, sizeof(buffer) - 1, MSG_DONTWAIT);
+
+            if(n > 0) {
+                buffer[n] = '\0';
+                Value event = Value::from_map({});
+
+                event.map["type"]   = Value::from_str("data");
+                event.map["client"] = Value::from_num(client);
+                event.map["data"]   = Value::from_str(buffer);
+
+                events.arr.push_back(event);
+
+                i++;
+            }
+
+            else if(n == 0) {
+
+                close(client);
+                Value event = Value::from_map({});
+
+                event.map["type"]   = Value::from_str("disconnect");
+                event.map["client"] = Value::from_num(client);
+                events.arr.push_back(event);
+                tcp_clients.erase(tcp_clients.begin() + i);
+            }
+
+            else {
+                i++;
+            }
+        }
+
+        return events;
     });
 
     interp.register_native("tcp_close", [](std::vector<Value> args) {

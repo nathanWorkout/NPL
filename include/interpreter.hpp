@@ -238,7 +238,6 @@ private:
         else if(auto n = dynamic_cast<IndexAssign*>(node)) exec_index_assign(n);
             // else if(auto n = dynamic_cast<Output*>(node))      exec_output(n);
         else if(auto n = dynamic_cast<Output*>(node)) {
-            std::cerr << "OUTPUT NODE FOUND\n";
             exec_output(n);
         }
         else if(auto n = dynamic_cast<IfStmt*>(node))      exec_if(n);
@@ -483,7 +482,6 @@ private:
 
     void print(const std::string& text, bool newline = true)
     {
-        std::cerr << "CURSES MODE = " << curses_mode << "\n";
         if (curses_mode) {
             printw("%s", text.c_str());
             if (newline) printw("\n");
@@ -497,7 +495,6 @@ private:
 
     void exec_output(Output* node)
     {
-        std::cerr << "EXEC_OUTPUT\n";
         std::string text = eval(node->value.get()).to_display();
         print(text);
     }
