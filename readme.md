@@ -95,7 +95,7 @@ repeat 1000 -> {
 use std/string
 
 s = "  Hello, World!  "
->> len(s)                          # 17
+>> str_len(s)                      # 17
 >> trim(s)                         # Hello, World!
 >> up(s)                           # HELLO, WORLD!
 >> has(s, "World")                 # true
@@ -113,7 +113,8 @@ git clone https://github.com/nathanWorkout/NPL
 cd NPL
 make
 sudo cp ./npl /usr/local/bin/npl
-sudo ln -s $(pwd)/libs /usr/local/lib/npl
+sudo mkdir -p /usr/local/lib
+sudo ln -s /home/nathan/Dev/NathanProgrammingLangage/libs /usr/local/lib/npl
 ```
 
 ```bash

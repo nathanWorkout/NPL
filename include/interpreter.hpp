@@ -44,8 +44,10 @@ struct Value {
     std::string to_display() const;
 };
 
-struct ReturnException {
+struct ReturnException : public std::exception {
     Value value;
+    explicit ReturnException(Value v) : value(std::move(v)) {}
+    const char* what() const noexcept override { return "ReturnException"; }
 };
 
 struct ScopeGuard {
@@ -59,6 +61,7 @@ public:
     void set_curses_mode(bool enabled);
     bool is_curses_mode() const;
     void register_native(const std::string& name, std::function<Value(std::vector<Value>)> fn);
+    void register_core_natives();
 
     std::unordered_map<std::string, std::function<Value(std::vector<Value>)>> natives_;
 

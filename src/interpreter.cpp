@@ -1,6 +1,10 @@
+#include <thread>
+#include <mutex>
 #include "../include/interpreter.hpp"
 #include "../include/lexer.hpp"
 #include "../include/parser.hpp"
+
+static std::mutex g_print_mutex;
 
 Value Value::from_styled(const std::string& text, int color, int style) {
     Value v;
@@ -85,21 +89,95 @@ ScopeGuard::~ScopeGuard() {
     scopes.pop_back();
 }
 
+void Interpreter::register_core_natives() {
+    register_native("output", [this](std::vector<Value> args) {
+        if (!args.empty()) {
+            std::string text = args[0].to_display();
+            print(text);
+        } else {
+            print("");
+        }
+        return Value::null();
+    });
+
+    register_native("input", [this](std::vector<Value> args) {
+        if (!args.empty()) {
+            print(args[0].to_display(), false);
+        }
+
+        std::string input_str = read_input();
+
+        try {
+            return Value::from_num(std::stod(input_str));
+        } catch (const std::invalid_argument&) {
+            return Value::from_str(input_str);
+        } catch (const std::out_of_range&) {
+            return Value::from_str(input_str);
+        }
+    });
+
+    register_native("thread", [this](std::vector<Value> args) {
+        if (args.empty() || args[0].type != Value::Type::Function) {
+            throw std::runtime_error("thread() attend une fonction en paramètre !");
+        }
+
+        FuncDef* func_npl = args[0].fn.func;
+        if (!func_npl) return Value::null();
+
+        auto shared_funcs = this->funcs_;
+        bool parent_curses_mode = this->is_curses_mode();
+
+        std::thread t([parent_curses_mode, func_npl, shared_funcs]() {
+            try {
+                Interpreter thread_interpreter;
+                thread_interpreter.set_curses_mode(parent_curses_mode);
+                thread_interpreter.push_scope();
+                thread_interpreter.register_core_natives();
+
+                for (auto& [name, func_ptr] : shared_funcs) {
+                    thread_interpreter.exec_funcdef(func_ptr);
+                }
+
+                if (func_npl && func_npl->body) {
+                    thread_interpreter.run(func_npl->body.get());
+                }
+            }
+            catch (const ReturnException&) {}
+            catch (const std::exception& e) {
+                std::cerr << "[Erreur Thread] " << e.what() << std::endl;
+            }
+            catch (...) {
+                std::cerr << "[Erreur Thread] Erreur inconnue" << std::endl;
+            }
+        });
+
+        t.detach();
+        return Value::null();
+    });
+}
 void Interpreter::run(ASTNode* node) {
+    register_core_natives();
+
     push_scope();
     ScopeGuard guard{scopes_};
 
-    if(auto block = dynamic_cast<Block*>(node)) {
-        for(auto& s : block->statements) {
-            if(!s) continue;
-            if(auto fn = dynamic_cast<FuncDef*>(s.get()))
-                exec_funcdef(fn);
-            else
-                execute(s.get());
+    try {
+        if(auto block = dynamic_cast<Block*>(node)) {
+            for(auto& s : block->statements) {
+                if(!s) continue;
+                if(auto fn = dynamic_cast<FuncDef*>(s.get()))
+                    exec_funcdef(fn);
+                else
+                    execute(s.get());
+            }
+            return;
         }
-        return;
+        execute(node);
     }
-    execute(node);
+    catch (const ReturnException&) {
+        // C'est un comportement normal (fin de script ou fin de fonction)
+        // donc on l'attrape et on ne fait rien pour éviter que ça remonte au main.cpp
+    }
 }
 
 void Interpreter::set_curses_mode(bool enabled) { curses_mode = enabled; }
@@ -313,6 +391,7 @@ void Interpreter::exec_block(Block* node) {
 }
 
 void Interpreter::exec_assign(Assign* node) {
+    if (node->name.empty()) return;
     Value val = eval(node->value.get());
     set_var(node->name, val);
 }
@@ -361,6 +440,7 @@ std::string Interpreter::read_input_tui() {
 }
 
 void Interpreter::print(const std::string& text, bool newline) {
+    std::lock_guard<std::mutex> lock(g_print_mutex);
     if (curses_mode) {
         printw("%s", text.c_str());
         if (newline) printw("\n");
@@ -476,6 +556,7 @@ Value Interpreter::exec_funccall(FuncCall* node) {
 void Interpreter::exec_input(InputStmt* node) {
     if(!node->prompt.empty()) print(node->prompt, false);
     std::string input = read_input();
+    if (node->name.empty()) return;
     try { set_var(node->name, Value::from_num(std::stod(input))); }
     catch(...) { set_var(node->name, Value::from_str(input)); }
 }
@@ -669,5 +750,7 @@ Value Interpreter::eval_pipe(PipeExpr* n) {
             }
         }
     }
+
+
     return left;
 }
