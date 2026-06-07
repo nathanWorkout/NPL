@@ -1,52 +1,56 @@
-connect_handler = null
-data_handler = null
-disconnect_handler = null
+connect_callback = null
+data_callback = null
+disconnect_callback = null
 
 fn on_connect(handler) -> {
-    connect_handler = handler
+    connect_callback = handler
 }
 
 fn on_data(handler) -> {
-    data_handler = handler
+    data_callback = handler
 }
 
 fn on_disconnect(handler) -> {
-    disconnect_handler = handler
+    disconnect_callback = handler
 }
 
 fn send(client, packet) -> {
     tcp_write(client, packet)
 }
 
+
 fn serve(port) -> {
+server = tcp_listen(port)
 
-    server = tcp_listen(port)
+if server < 0 -> {
+    >> "error: cannot start server"
+    << null
+}
 
-    if server < 0 -> {
-        >> "error: cannot start server"
-        << null
-    }
+while true -> {
 
-    while true -> {
+    events = tcp_poll(server)
+    events | each {
 
-        events = tcp_poll(server)
+        event = item
 
-        events | each {
-            event = item
-            type = event["type"]
-            client = event["client"]
+        if event["type"] == "connect" -> {
+            if connect_callback != null ->
+                connect_callback(event["client"])
+        }
 
-            if type == "connect" -> {
-                if connect_handler != null -> connect_handler(client)
-            }
+        elif event["type"] == "data" -> {
+            if data_callback != null ->
+                data_callback(
+                    event["client"],
+                    event["data"]
+                )
+        }
 
-            elif type == "data" -> {
-                if data_handler != null -> data_handler(client, event["data"])
-            }
-
-            elif type == "disconnect" -> {
-                if disconnect_handler != null -> disconnect_handler(client)
-            }
+        elif event["type"] == "disconnect" -> {
+            if disconnect_callback != null -> disconnect_callback(event["client"])
         }
     }
+}
+
 }

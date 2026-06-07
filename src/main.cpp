@@ -47,16 +47,19 @@ int main(int argc, char* argv[])
     runtime::register_tui_functions(interp);
 
     try {
-        interp.run(ast.get());
-    }
-    catch(const std::exception& e) {
-        if(interp.is_curses_mode()) endwin();
+            interp.run(ast.get());
+        }
+        catch(const std::runtime_error& e) {
+            if(interp.is_curses_mode()) endwin();
 
-        std::cerr << e.what() << std::endl;
-        return 1;
-    }
-
-    if(interp.is_curses_mode()) endwin();
+            std::cerr << "\033[1;31m[Erreur d'exécution NPL] " << e.what() << "\033[0m" << std::endl;
+            return 1;
+        }
+        catch(const std::exception& e) {
+            if(interp.is_curses_mode()) endwin();
+            std::cerr << "[Erreur Système] " << e.what() << std::endl;
+            return 1;
+        }
 
     return 0;
 }
