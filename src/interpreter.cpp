@@ -3,6 +3,10 @@
 #include "../include/interpreter.hpp"
 #include "../include/lexer.hpp"
 #include "../include/parser.hpp"
+#include "framework_web/htmlBuilder.hpp"
+#include "framework_web/html_elements.hpp"
+#include "framework_web/web_natives.hpp"
+
 
 static std::mutex g_print_mutex;
 
@@ -157,9 +161,12 @@ void Interpreter::register_core_natives() {
 }
 void Interpreter::run(ASTNode* node) {
     register_core_natives();
+    NPL::register_web_natives(this);
 
     push_scope();
     ScopeGuard guard{scopes_};
+
+    def_var("_", Value::from_str(""));
 
     try {
         if(auto block = dynamic_cast<Block*>(node)) {
@@ -258,7 +265,6 @@ void Interpreter::execute(ASTNode* node) {
 
 Value Interpreter::eval(ASTNode* node) {
     if(!node) return Value::null();
-
     if(auto n = dynamic_cast<NumberLit*>(node)) return Value::from_num(n->value);
     if(auto n = dynamic_cast<StringLit*>(node)) return Value::from_str(n->value);
     if(auto n = dynamic_cast<BoolLit*>(node)) return Value::from_bool(n->value);
@@ -297,6 +303,7 @@ Value Interpreter::eval(ASTNode* node) {
     if(auto n = dynamic_cast<BinOp*>(node))   return eval_binop(n);
     if(auto n = dynamic_cast<FuncCall*>(node)) return exec_funccall(n);
     if(auto n = dynamic_cast<NullLit*>(node)) return Value::null();
+    if(auto n = dynamic_cast<ComponentExpr*>(node)) return eval_component(n);
     if(auto n = dynamic_cast<PipeExpr*>(node)) return eval_pipe(n);
     if(auto n = dynamic_cast<Placeholder*>(node)) return get_var("_");
 
@@ -451,9 +458,24 @@ void Interpreter::print(const std::string& text, bool newline) {
     }
 }
 
+bool is_html(const std::string& str) {
+    if (str.size() >= 5) {
+        return str.compare(str.size() - 5, 5, ".html") == 0;
+    }
+    return false;
+}
+
 void Interpreter::exec_output(Output* node) {
     std::string text = eval(node->value.get()).to_display();
-    print(text);
+    if(is_html(text)) {
+        Value web_value = get_var("_");
+        std::string code_components = web_value.to_display();
+
+        HtmlBuilder builder;
+        std::string page = builder.buildPage(code_components);
+        builder.saveFile(text, page);
+
+    } else print(text);
 }
 
 void Interpreter::exec_if(IfStmt* node) {
@@ -657,6 +679,9 @@ Value Interpreter::eval_pipe(PipeExpr* n) {
             if(dynamic_cast<Placeholder*>(arg.get())) { has_placeholder = true; break; }
         }
 
+        Value pipe_result = Value::null();
+        bool executed_call = false;
+
         if(has_placeholder) {
             std::vector<Value> args_values;
             for(auto& arg : call->args) {
@@ -671,23 +696,23 @@ Value Interpreter::eval_pipe(PipeExpr* n) {
                     push_scope(); ScopeGuard guard{scopes_};
                     def_var("__fn_boundary__", Value::from_bool(true));
                     for(size_t i = 0; i < f->params.size(); i++) def_var(f->params[i], args_values[i]);
-                    Value result = Value::null();
-                    try { execute(f->body.get()); } catch(ReturnException& ret) { result = ret.value; }
-                    return result;
+                    try { execute(f->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
+                    executed_call = true;
                 }
             } catch(...) {}
 
-            auto nat = natives_.find(call->name);
-            auto it  = funcs_.find(call->name);
-            if(nat != natives_.end()) return nat->second(args_values);
-            if(it != funcs_.end()) {
-                FuncDef* func = it->second;
-                push_scope(); ScopeGuard guard{scopes_};
-                def_var("__fn_boundary__", Value::from_bool(true));
-                for(size_t i = 0; i < func->params.size(); i++) def_var(func->params[i], args_values[i]);
-                Value result = Value::null();
-                try { execute(func->body.get()); } catch(ReturnException& ret) { result = ret.value; }
-                return result;
+            if(!executed_call) {
+                auto nat = natives_.find(call->name);
+                auto it  = funcs_.find(call->name);
+                if(nat != natives_.end()) { pipe_result = nat->second(args_values); executed_call = true; }
+                else if(it != funcs_.end()) {
+                    FuncDef* func = it->second;
+                    push_scope(); ScopeGuard guard{scopes_};
+                    def_var("__fn_boundary__", Value::from_bool(true));
+                    for(size_t i = 0; i < func->params.size(); i++) def_var(func->params[i], args_values[i]);
+                    try { execute(func->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
+                    executed_call = true;
+                }
             }
         } else {
             std::vector<Value> args_values;
@@ -728,29 +753,122 @@ Value Interpreter::eval_pipe(PipeExpr* n) {
                     push_scope(); ScopeGuard guard{scopes_};
                     def_var("__fn_boundary__", Value::from_bool(true));
                     for(size_t i = 0; i < f->params.size(); i++) def_var(f->params[i], args_values[i]);
-                    Value result = Value::null();
-                    try { execute(f->body.get()); } catch(ReturnException& ret) { result = ret.value; }
-                    return result;
+                    try { execute(f->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
+                    executed_call = true;
                 }
             } catch(...) {}
 
-            auto nat = natives_.find(func_name);
-            auto it  = funcs_.find(func_name);
-            if(nat != natives_.end()) return nat->second(args_values);
-            if(it != funcs_.end()) {
-                FuncDef* func = it->second;
-                if(args_values.size() == func->params.size()) {
-                    push_scope(); ScopeGuard guard{scopes_};
-                    def_var("__fn_boundary__", Value::from_bool(true));
-                    for(size_t i = 0; i < func->params.size(); i++) def_var(func->params[i], args_values[i]);
-                    Value result = Value::null();
-                    try { execute(func->body.get()); } catch(ReturnException& ret) { result = ret.value; }
-                    return result;
+            if(!executed_call) {
+                auto nat = natives_.find(func_name);
+                auto it  = funcs_.find(func_name);
+                if(nat != natives_.end()) { pipe_result = nat->second(args_values); executed_call = true; }
+                else if(it != funcs_.end()) {
+                    FuncDef* func = it->second;
+                    if(args_values.size() == func->params.size()) {
+                        push_scope(); ScopeGuard guard{scopes_};
+                        def_var("__fn_boundary__", Value::from_bool(true));
+                        for(size_t i = 0; i < func->params.size(); i++) def_var(func->params[i], args_values[i]);
+                        try { execute(func->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
+                        executed_call = true;
+                    }
                 }
+            }
+        }
+
+        if(executed_call) {
+            if (scopes_.size() > 1) {
+                for (int i = (int)scopes_.size() - 2; i >= 0; i--) {
+                    if (scopes_[i].count("_")) {
+                        std::string old_html = scopes_[i]["_"].to_display();
+                        std::string raw_child_html = left.to_display();
+
+                        size_t pos = old_html.rfind(raw_child_html);
+                        if (pos != std::string::npos && pos + raw_child_html.length() == old_html.length()) {
+                            scopes_[i]["_"] = Value::from_str(old_html.substr(0, pos) + pipe_result.to_display());
+                        } else {
+                            scopes_[i]["_"] = pipe_result;
+                        }
+                        break;
+                    }
+                }
+            }
+            return pipe_result;
+        }
+    }
+
+    return left;
+}
+
+Value Interpreter::eval_component(ComponentExpr* n) {
+
+    // 1 : On récupère le nom du tag HTML (ex: h1 ou div...)
+    std::string tag_name = "";
+    if (n->name) {
+        if (auto id = dynamic_cast<Identifier*>(n->name.get())) {
+            tag_name = id->name;
+        } else {
+            Value evaluated_name = eval(n->name.get());
+            if (evaluated_name.type != Value::Type::Null) {
+                tag_name = evaluated_name.to_display();
             }
         }
     }
 
+    // 2. On crée un scope local isolé pour le corps de ce composant
+    push_scope();
+    ScopeGuard guard{scopes_};
 
-    return left;
+    // Le "_" est local au composant actuel (ex: la div parente)
+    def_var("_", Value::from_str(""));
+
+    std::string inner_html = "";
+
+    // 3 : Évaluation du contenu (bloc d'instruction ou expression simple)
+    if (auto block = dynamic_cast<Block*>(n->body.get())) {
+        // C'est un bloc {}, on exécute chaque instruction à l'intérieur
+        for (auto& stmt : block->statements) {
+            // Si c'est un composant écrit seul dans le bloc (ex: h1 -> "salut")
+            if (auto exprStmt = dynamic_cast<ExprStatement*>(stmt.get())) {
+                // On l'évalue, le composant enfant va s'exécuter et, via l'étape 4,
+                // il va venir injecter son code HTML directement dans notre variable "_" locale
+                eval(exprStmt->expr.get());
+            } else {
+                // Pour toutes les autres instructions normales (Assign, Output, loops...)
+                execute(stmt.get());
+            }
+        }
+        inner_html = get_var("_").to_display();
+    } else {
+        inner_html = eval(n->body.get()).to_display();
+    }
+
+    std::string html_result = NPL::render_element(tag_name, inner_html);
+
+    Value parent_underscore = Value::null();
+    if (scopes_.size() > 1) {
+        for (int i = (int)scopes_.size() - 2; i >= 0; i--) {
+            if (scopes_[i].count("_")) {
+                parent_underscore = scopes_[i]["_"];
+                break;
+            }
+            if (i > 0 && scopes_[i].count("__fn_boundary__")) break;
+        }
+    }
+
+    std::string accumulated = "";
+    if (parent_underscore.type == Value::Type::String) {
+        accumulated = parent_underscore.str;
+    } else if (parent_underscore.type != Value::Type::Null) {
+        accumulated = parent_underscore.to_display();
+    }
+
+    Value final_val = Value::from_str(accumulated + html_result);
+
+    if (scopes_.size() > 1) {
+        scopes_[scopes_.size() - 2]["_"] = final_val;
+    } else {
+        set_var("_", final_val);
+    }
+
+    return final_val;
 }

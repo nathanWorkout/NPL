@@ -62,6 +62,7 @@ public:
     bool is_curses_mode() const;
     void register_native(const std::string& name, std::function<Value(std::vector<Value>)> fn);
     void register_core_natives();
+    Value get_var(const std::string& name);
 
     std::unordered_map<std::string, std::function<Value(std::vector<Value>)>> natives_;
 
@@ -79,14 +80,14 @@ private:
     void pop_scope();
     void set_var(const std::string& name, Value val);
     void def_var(const std::string& name, Value val);
-    Value get_var(const std::string& name);
     Value& get_var_ref(const std::string& name);
 
     void execute(ASTNode* node);
     Value eval(ASTNode* node);
     Value eval_binop(BinOp* n);
     Value eval_pipe(PipeExpr* n);
-
+    Value eval_component(ComponentExpr* n);
+    bool has_var(const std::string& name) const;
     void exec_block(Block* node);
     void exec_assign(Assign* node);
     void exec_index_assign(IndexAssign* node);

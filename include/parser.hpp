@@ -41,4 +41,5 @@ private:
     std::unique_ptr<ASTNode> parse_term();
     std::unique_ptr<ASTNode> parse_unary();
     std::unique_ptr<ASTNode> parse_pipeline();
+    std::unique_ptr<ASTNode> parse_component();
 };

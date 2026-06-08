@@ -3,6 +3,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <cstdlib>
 
 #include "../include/lexer.hpp"
 #include "../include/parser.hpp"
@@ -50,6 +51,7 @@ int main(int argc, char* argv[])
             interp.run(ast.get());
             std::cout << "\n[NPL] Script terminé. Appuie sur ENTRÉE pour quitter et fermer les threads..." << std::endl;
             std::cin.get();
+            std::exit(0); // Force la fermeture instant du programme complet (utile pour arreter sans segmentation fault)
         }
         catch(const std::runtime_error& e) {
             if(interp.is_curses_mode()) endwin();

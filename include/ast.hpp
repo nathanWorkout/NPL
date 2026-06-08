@@ -142,4 +142,9 @@ struct InputExpr : ASTNode {
     std::string prompt;
 };
 
+struct ComponentExpr : ASTNode {
+    std::unique_ptr<ASTNode> name;
+    std::unique_ptr<ASTNode> body;
+};
+
 #endif

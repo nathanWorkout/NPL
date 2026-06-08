@@ -3,14 +3,17 @@ CXXFLAGS := -std=c++23 -Wall -Wextra -Iinclude -finput-charset=UTF-8 -fexec-char
 DBGFLAGS := -g3 -O0 -fsanitize=address,undefined
 RELFLAGS := -O2
 
-SRCDIR   := src
+SRCDIR     := src
 RUNTIMEDIR := src/runtime
-BUILDDIR := build
-TARGET   := npl
+WEBDIR     := src/framework_web
+BUILDDIR   := build
+TARGET     := npl
 
-SRCS := $(wildcard $(SRCDIR)/*.cpp) $(wildcard $(RUNTIMEDIR)/*.cpp)
+SRCS := $(wildcard $(SRCDIR)/*.cpp) $(wildcard $(RUNTIMEDIR)/*.cpp) $(wildcard $(WEBDIR)/*.cpp)
+
 OBJS := $(patsubst $(SRCDIR)/%.cpp, $(BUILDDIR)/%.o, $(SRCS))
 OBJS := $(OBJS:$(RUNTIMEDIR)/%.cpp=$(BUILDDIR)/runtime/%.o)
+OBJS := $(OBJS:$(WEBDIR)/%.cpp=$(BUILDDIR)/framework_web/%.o)
 
 LIBS := -lncursesw
 

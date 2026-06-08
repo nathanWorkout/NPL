@@ -1,5 +1,5 @@
 #include <iostream>
-#include "parser.hpp"
+#include "../include/parser.hpp"
 
 Parser::Parser(std::vector<Token>& tokens) : tokens_(tokens) {}
 
@@ -69,7 +69,14 @@ std::unique_ptr<ASTNode> Parser::parse_statement()
     }
     if(peek().value == "fn") return parse_funcdef();
 
-
+    // force l'interception : Si on a un identifiant suivi d'une flèche (composant racine)
+    if(peek().type == TokenType::IDENTIFIER && i + 1 < tokens_.size() &&
+      (tokens_[i + 1].value == "->" || tokens_[i + 1].type == TokenType::ARROW))
+    {
+        auto node = std::make_unique<ExprStatement>();
+        node->expr = parse_pipeline();
+        return node;
+    }
 
     if(peek().type == TokenType::IDENTIFIER)
     {
@@ -567,9 +574,69 @@ std::unique_ptr<ASTNode> Parser::parse_unary()
     return parse_primary();
 }
 
+std::unique_ptr<ASTNode> Parser::parse_component()
+{
+    // On sauvegarde la position au cas où ce n'est pas un composant
+    size_t start_pos = i;
+
+    // Si le token actuel est un identifiant (ex: div, h1, p) et que le suivant est "->"
+    if (!at_end() && peek().type == TokenType::IDENTIFIER && (i + 1 < tokens_.size() && tokens_[i + 1].value == "->"))
+    {
+        // On extrait directement le nom sous forme d'Identifier
+        auto id_node = std::make_unique<Identifier>();
+        id_node->name = consume().value; // skip le nom (ex: "div")
+        consume(); // Mange le "->"
+
+        auto comp_node = std::make_unique<ComponentExpr>();
+        comp_node->name = std::move(id_node);
+
+        // Si derrière la flèche il y a un '{', on parse un bloc de sous-composants
+        if (!at_end() && peek().type == TokenType::PUNCTUATOR && peek().value == "{") {
+            consume();
+            auto blk = std::make_unique<Block>();
+            while (!at_end() && !(peek().type == TokenType::PUNCTUATOR && peek().value == "}")) {
+                blk->statements.push_back(parse_statement());
+            }
+            consume();
+            comp_node->body = std::move(blk);
+        } else {
+            // Sinon, c'est juste une expression classique
+            comp_node->body = parse_cond();
+        }
+        return comp_node;
+    }
+
+    // Si ce n'est pas un composant avec flèche, on reprend le cours normal
+    i = start_pos;
+    auto left = parse_cond();
+
+    if (!at_end() && peek().type == TokenType::ARROW)
+    {
+        consume(); // On mange le "->"
+
+        auto comp_node = std::make_unique<ComponentExpr>();
+        comp_node->name = std::move(left);
+
+        if (!at_end() && peek().type == TokenType::PUNCTUATOR && peek().value == "{") {
+            consume();
+            auto blk = std::make_unique<Block>();
+            while (!at_end() && !(peek().type == TokenType::PUNCTUATOR && peek().value == "}")) {
+                blk->statements.push_back(parse_statement());
+            }
+            consume();
+            comp_node->body = std::move(blk);
+        } else {
+            comp_node->body = parse_cond();
+        }
+        return comp_node;
+    }
+
+    return left;
+}
+
 std::unique_ptr<ASTNode> Parser::parse_pipeline()
 {
-    auto left = parse_cond();
+    auto left = parse_component();
 
     while(!at_end() && peek().type == TokenType::OPERATOR && peek().value == "|")
     {
