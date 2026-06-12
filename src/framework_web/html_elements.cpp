@@ -3,13 +3,22 @@
 namespace NPL {
 
 std::string render_element(const std::string& tag_name, const std::string& inner_html) {
-    if (tag_name == "div")     return "<div>" + inner_html + "</div>";
-    if (tag_name == "span")    return "<span>" + inner_html + "</span>";
-    if (tag_name == "header")  return "<header>" + inner_html + "</header>";
-    if (tag_name == "main")    return "<main>" + inner_html + "</main>";
-    if (tag_name == "section") return "<section>" + inner_html + "</section>";
-    if (tag_name == "article") return "<article>" + inner_html + "</article>";
-    if (tag_name == "footer")  return "<footer>" + inner_html + "</footer>";
+    if (tag_name == "div")      return "<div>" + inner_html + "</div>";
+    if (tag_name == "span")     return "<span>" + inner_html + "</span>";
+
+    if (tag_name == "left") {
+        return "<div class=\"flex items-center justify-start mr-auto pl-[0px]\">" + inner_html + "</div>";
+    }
+
+    if (tag_name == "right") {
+        return "<div class=\"flex items-center justify-end ml-auto pr-[0px]\">" + inner_html + "</div>";
+    }
+
+    if (tag_name == "header")   return "<header class=\"flex items-center justify-between w-full\">" + inner_html + "</header>";
+    if (tag_name == "main")     return "<main>" + inner_html + "</main>";
+    if (tag_name == "section")  return "<section>" + inner_html + "</section>";
+    if (tag_name == "article")  return "<article>" + inner_html + "</article>";
+    if (tag_name == "footer")   return "<footer>" + inner_html + "</footer>";
 
     if (tag_name == "h1") return "<h1 class=\"text-4xl font-extrabold\">" + inner_html + "</h1>";
     if (tag_name == "h2") return "<h2 class=\"text-2xl font-bold\">" + inner_html + "</h2>";

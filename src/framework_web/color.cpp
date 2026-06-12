@@ -24,7 +24,7 @@ namespace NPL {
             std::string hex = (color_val[0] == '#') ? color_val : "#" + color_val;
 
             if (is_background) {
-                return "<div style=\"background-color: " + hex + ";\" class=\"p-6 rounded-2xl\">" + html + "</div>";
+                return "<div style=\"background-color: " + hex + "; display: inline-block;\">" + html + "</div>";
             } else {
                 return "<span style=\"color: " + hex + ";\">" + html + "</span>";
             }
@@ -35,7 +35,7 @@ namespace NPL {
                        [](unsigned char c){ return std::tolower(c); });
 
         if (is_background) {
-            return "<div class=\"bg-" + lower_color + "-600 p-6 rounded-2xl\">" + html + "</div>";
+            return "<div class=\"inline-block bg-" + lower_color + "-600\">" + html + "</div>";
         } else {
             return "<span class=\"text-" + lower_color + "-500\">" + html + "</span>";
         }

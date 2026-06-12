@@ -591,9 +591,17 @@ void Interpreter::exec_use(UseStmt* node) {
     size_t pos;
     while((pos = lib.find("//")) != std::string::npos) lib.replace(pos, 2, "/");
 
-    std::string path = "/usr/local/lib/npl/" + lib + ".npl";
+    // 1. On tente d'abord de chercher le fichier localement
+    std::string path = "./" + lib + ".npl";
     std::ifstream file(path);
-    if(!file.is_open()) throw std::runtime_error("Lib introuvable : " + node->lib);
+
+    // 2. Si le fichier local n'existe pas, on cherche dans la bibliothèque npl
+    if(!file.is_open()) {
+        path = "/usr/local/lib/npl/" + lib + ".npl";
+        file.open(path);
+        if(!file.is_open()) throw std::runtime_error("Lib ou fichier introuvable : " + node->lib);
+    }
+
     std::string src((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
     auto tokens = tokenize(src);
@@ -621,254 +629,284 @@ void Interpreter::exec_try(TryStmt* node) {
     }
 }
 
-Value Interpreter::eval_pipe(PipeExpr* n) {
-    Value left = eval(n->lhs.get());
-    set_var("_", left);
+Value Interpreter::eval_component(ComponentExpr* n) {
+	std::string tag_name = "";
 
-    if(auto out = dynamic_cast<Output*>(n->rhs.get())) {
-        if(left.type == Value::Type::Array) {
-            for(auto& item : left.arr) {
-                set_var("_", item);
-                if(out->value) print(eval(out->value.get()).to_display());
-                else print(item.to_display());
-            }
-            return left;
-        }
-        set_var("_", left);
-        if(out->value) print(eval(out->value.get()).to_display());
-        else print(left.to_display());
-        return left;
-    }
+	if (n->name) {
+		if (auto id = dynamic_cast<Identifier*>(n->name.get())) {
+			tag_name = id->name;
+		} else {
+			Value evaluated_name = eval(n->name.get());
+			if (evaluated_name.type != Value::Type::Null) {
+				tag_name = evaluated_name.to_display();
+			}
+		}
+	}
 
-    if(auto lambda = dynamic_cast<LambdaBlock*>(n->rhs.get())) {
-        if(left.type == Value::Type::Array) {
-            std::vector<Value> result;
-            for(auto& item : left.arr) {
-                push_scope(); ScopeGuard guard{scopes_};
-                set_var("item", item); set_var("_", item);
-                Value val = Value::null();
-                try { execute(lambda->body.get()); }
-                catch(ReturnException& ret) { val = ret.value; }
-                result.push_back(val);
-            }
-            return Value::from_arr(result);
-        }
-        return left;
-    }
+	push_scope();
+	def_var("__component_scope__", Value::from_bool(true));
+	ScopeGuard guard{scopes_};
 
-    ASTNode* rhs = n->rhs.get();
-    if(auto call = dynamic_cast<FuncCall*>(rhs)) {
-        if(call->name == "repeat") {
-            Value pattern;
-            if(call->args.size() >= 1) pattern = eval(call->args[0].get());
-            else {
-                if(auto lit = dynamic_cast<StringLit*>(rhs)) pattern = Value::from_str(lit->value);
-                else pattern = eval(rhs);
-            }
-            if(pattern.type != Value::Type::String) pattern = Value::from_str(pattern.to_display());
-            if(left.type != Value::Type::Number) throw std::runtime_error("repeat attend un nombre à gauche");
+	def_var("_", Value::from_str(""));
 
-            long long n = (long long)left.num;
-            std::vector<Value> out;
-            for(long long i = 0; i < n; i++) out.push_back(Value::from_str(pattern.str));
-            return Value::from_arr(out);
-        }
+	std::string inner_html = "";
 
-        bool has_placeholder = false;
-        for(auto& arg : call->args) {
-            if(dynamic_cast<Placeholder*>(arg.get())) { has_placeholder = true; break; }
-        }
+	if (auto block = dynamic_cast<Block*>(n->body.get())) {
+			for (auto& stmt : block->statements) {
+				if (auto exprStmt = dynamic_cast<ExprStatement*>(stmt.get())) {
+					// Sauvegarde de l'accumulateur avant l'évaluation de l'expression
+					std::string before_eval = get_var("_").to_display();
 
-        Value pipe_result = Value::null();
-        bool executed_call = false;
+					// On isole l'évaluation dans un sous-scope pour que l'enfant ne bousille pas le parent
+					push_scope();
+					def_var("_", Value::from_str(""));
+					Value expr_res = eval(exprStmt->expr.get());
+					std::string child_html = get_var("_").to_display();
+					if (child_html.empty()) child_html = expr_res.to_display();
+					scopes_.pop_back();
 
-        if(has_placeholder) {
-            std::vector<Value> args_values;
-            for(auto& arg : call->args) {
-                if(dynamic_cast<Placeholder*>(arg.get())) args_values.push_back(left);
-                else args_values.push_back(eval(arg.get()));
-            }
+					if (!before_eval.empty() && before_eval.back() != '\n' && !child_html.empty()) {
+						before_eval += "\n";
+					}
+					set_var("_", Value::from_str(before_eval + child_html));
+				} else {
+					execute(stmt.get());
+				}
+			}
+			inner_html = get_var("_").to_display();
+		} else {
+		inner_html = eval(n->body.get()).to_display();
+	}
 
-            try {
-                Value var = get_var(call->name);
-                if(var.type == Value::Type::Function) {
-                    FuncDef* f = var.fn.func;
-                    push_scope(); ScopeGuard guard{scopes_};
-                    def_var("__fn_boundary__", Value::from_bool(true));
-                    for(size_t i = 0; i < f->params.size(); i++) def_var(f->params[i], args_values[i]);
-                    try { execute(f->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
-                    executed_call = true;
-                }
-            } catch(...) {}
+	std::string html_result = NPL::render_element(tag_name, inner_html) + "\n";
 
-            if(!executed_call) {
-                auto nat = natives_.find(call->name);
-                auto it  = funcs_.find(call->name);
-                if(nat != natives_.end()) { pipe_result = nat->second(args_values); executed_call = true; }
-                else if(it != funcs_.end()) {
-                    FuncDef* func = it->second;
-                    push_scope(); ScopeGuard guard{scopes_};
-                    def_var("__fn_boundary__", Value::from_bool(true));
-                    for(size_t i = 0; i < func->params.size(); i++) def_var(func->params[i], args_values[i]);
-                    try { execute(func->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
-                    executed_call = true;
-                }
-            }
-        } else {
-            std::vector<Value> args_values;
-            args_values.push_back(left);
-            for(auto& arg : call->args) args_values.push_back(eval(arg.get()));
+	Value parent_underscore = Value::null();
+	bool has_component_parent = false;
+	int parent_scope_index = -1;
 
-            if(call->name == "filter") {
-                auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
-                if(!lambda) throw std::runtime_error("filter attend un bloc { }");
-                std::vector<Value> result;
-                for(auto& item : left.arr) {
-                    push_scope(); ScopeGuard guard{scopes_};
-                    def_var("item", item);
-                    Value cond = Value::null();
-                    try { execute(lambda->body.get()); } catch(ReturnException& ret) { cond = ret.value; }
-                    if(cond.truthy()) result.push_back(item);
-                }
-                return Value::from_arr(result);
-            }
+	if (scopes_.size() > 1) {
+		for (int i = (int)scopes_.size() - 2; i >= 0; i--) {
+			if (scopes_[i].count("__component_scope__")) {
+				has_component_parent = true;
+				parent_scope_index = i;
+				break;
+			}
+		}
 
-            if(call->name == "each") {
-                auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
-                if(!lambda) throw std::runtime_error("each attend un bloc { }");
-                for(auto& item : left.arr) {
-                    push_scope(); ScopeGuard guard{scopes_};
-                    def_var("item", item);
-                    try { execute(lambda->body.get()); } catch(ReturnException&) {}
-                }
-                return left;
-            }
+		for (int i = (int)scopes_.size() - 2; i >= 0; i--) {
+			if (scopes_[i].count("_")) {
+				parent_underscore = scopes_[i]["_"];
+				break;
+			}
+			if (i > 0 && scopes_[i].count("__fn_boundary__")) break;
+		}
+	}
 
-            std::string func_name = call->name;
-            try {
-                Value var = get_var(call->name);
-                if(var.type == Value::Type::Function) {
-                    FuncDef* f = var.fn.func;
-                    if(args_values.size() != f->params.size()) throw std::runtime_error("Arguments invalides");
-                    push_scope(); ScopeGuard guard{scopes_};
-                    def_var("__fn_boundary__", Value::from_bool(true));
-                    for(size_t i = 0; i < f->params.size(); i++) def_var(f->params[i], args_values[i]);
-                    try { execute(f->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
-                    executed_call = true;
-                }
-            } catch(...) {}
+	std::string accumulated = "";
+	if (parent_underscore.type == Value::Type::String && !has_component_parent) {
+		accumulated = parent_underscore.str;
+	}
 
-            if(!executed_call) {
-                auto nat = natives_.find(func_name);
-                auto it  = funcs_.find(func_name);
-                if(nat != natives_.end()) { pipe_result = nat->second(args_values); executed_call = true; }
-                else if(it != funcs_.end()) {
-                    FuncDef* func = it->second;
-                    if(args_values.size() == func->params.size()) {
-                        push_scope(); ScopeGuard guard{scopes_};
-                        def_var("__fn_boundary__", Value::from_bool(true));
-                        for(size_t i = 0; i < func->params.size(); i++) def_var(func->params[i], args_values[i]);
-                        try { execute(func->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
-                        executed_call = true;
-                    }
-                }
-            }
-        }
+	if (!accumulated.empty() && accumulated.back() != '\n') {
+		accumulated += "\n";
+	}
 
-        if(executed_call) {
-            if (scopes_.size() > 1) {
-                for (int i = (int)scopes_.size() - 2; i >= 0; i--) {
-                    if (scopes_[i].count("_")) {
-                        std::string old_html = scopes_[i]["_"].to_display();
-                        std::string raw_child_html = left.to_display();
+	Value final_val = Value::from_str(accumulated + html_result);
 
-                        size_t pos = old_html.rfind(raw_child_html);
-                        if (pos != std::string::npos && pos + raw_child_html.length() == old_html.length()) {
-                            scopes_[i]["_"] = Value::from_str(old_html.substr(0, pos) + pipe_result.to_display());
-                        } else {
-                            scopes_[i]["_"] = pipe_result;
-                        }
-                        break;
-                    }
-                }
-            }
-            return pipe_result;
-        }
-    }
+	if (scopes_.size() > 1) {
+		if (has_component_parent && parent_scope_index != -1) {
+			std::string current_parent_content = scopes_[parent_scope_index]["_"].to_display();
+			if (!current_parent_content.empty() && current_parent_content.back() != '\n') {
+				current_parent_content += "\n";
+			}
+			scopes_[parent_scope_index]["_"] = Value::from_str(current_parent_content + html_result);
+		} else {
+			scopes_[scopes_.size() - 2]["_"] = final_val;
+		}
+	} else {
+		set_var("_", final_val);
+	}
 
-    return left;
+	return final_val;
 }
 
-Value Interpreter::eval_component(ComponentExpr* n) {
+Value Interpreter::eval_pipe(PipeExpr* n) {
+	Value left = eval(n->lhs.get());
+	set_var("_", left);
 
-    // 1 : On récupère le nom du tag HTML (ex: h1 ou div...)
-    std::string tag_name = "";
-    if (n->name) {
-        if (auto id = dynamic_cast<Identifier*>(n->name.get())) {
-            tag_name = id->name;
-        } else {
-            Value evaluated_name = eval(n->name.get());
-            if (evaluated_name.type != Value::Type::Null) {
-                tag_name = evaluated_name.to_display();
-            }
-        }
-    }
+	if(auto out = dynamic_cast<Output*>(n->rhs.get())) {
+		if(left.type == Value::Type::Array) {
+			for(auto& item : left.arr) {
+				set_var("_", item);
+				if(out->value) print(eval(out->value.get()).to_display());
+				else print(item.to_display());
+			}
+			return left;
+		}
+		set_var("_", left);
+		if(out->value) print(eval(out->value.get()).to_display());
+		else print(left.to_display());
+		return left;
+	}
 
-    // 2. On crée un scope local isolé pour le corps de ce composant
-    push_scope();
-    ScopeGuard guard{scopes_};
+	if(auto lambda = dynamic_cast<LambdaBlock*>(n->rhs.get())) {
+		if(left.type == Value::Type::Array) {
+			std::vector<Value> result;
+			for(auto& item : left.arr) {
+				push_scope(); ScopeGuard guard{scopes_};
+				set_var("item", item); set_var("_", item);
+				Value val = Value::null();
+				try { execute(lambda->body.get()); }
+				catch(ReturnException& ret) { val = ret.value; }
+				result.push_back(val);
+			}
+			return Value::from_arr(result);
+		}
+		return left;
+	}
 
-    // Le "_" est local au composant actuel (ex: la div parente)
-    def_var("_", Value::from_str(""));
+	ASTNode* rhs = n->rhs.get();
+	if(auto call = dynamic_cast<FuncCall*>(rhs)) {
+		if(call->name == "repeat") {
+			Value pattern;
+			if(call->args.size() >= 1) pattern = eval(call->args[0].get());
+			else {
+				if(auto lit = dynamic_cast<StringLit*>(rhs)) pattern = Value::from_str(lit->value);
+				else pattern = eval(rhs);
+			}
+			if(pattern.type != Value::Type::String) pattern = Value::from_str(pattern.to_display());
+			if(left.type != Value::Type::Number) throw std::runtime_error("repeat attend un nombre à gauche");
 
-    std::string inner_html = "";
+			long long n = (long long)left.num;
+			std::vector<Value> out;
+			for(long long i = 0; i < n; i++) out.push_back(Value::from_str(pattern.str));
+			return Value::from_arr(out);
+		}
 
-    // 3 : Évaluation du contenu (bloc d'instruction ou expression simple)
-    if (auto block = dynamic_cast<Block*>(n->body.get())) {
-        // C'est un bloc {}, on exécute chaque instruction à l'intérieur
-        for (auto& stmt : block->statements) {
-            // Si c'est un composant écrit seul dans le bloc (ex: h1 -> "salut")
-            if (auto exprStmt = dynamic_cast<ExprStatement*>(stmt.get())) {
-                // On l'évalue, le composant enfant va s'exécuter et, via l'étape 4,
-                // il va venir injecter son code HTML directement dans notre variable "_" locale
-                eval(exprStmt->expr.get());
-            } else {
-                // Pour toutes les autres instructions normales (Assign, Output, loops...)
-                execute(stmt.get());
-            }
-        }
-        inner_html = get_var("_").to_display();
-    } else {
-        inner_html = eval(n->body.get()).to_display();
-    }
+		bool has_placeholder = false;
+		for(auto& arg : call->args) {
+			if(dynamic_cast<Placeholder*>(arg.get())) { has_placeholder = true; break; }
+		}
 
-    std::string html_result = NPL::render_element(tag_name, inner_html);
+		Value pipe_result = Value::null();
+		bool executed_call = false;
 
-    Value parent_underscore = Value::null();
-    if (scopes_.size() > 1) {
-        for (int i = (int)scopes_.size() - 2; i >= 0; i--) {
-            if (scopes_[i].count("_")) {
-                parent_underscore = scopes_[i]["_"];
-                break;
-            }
-            if (i > 0 && scopes_[i].count("__fn_boundary__")) break;
-        }
-    }
+		if(has_placeholder) {
+			std::vector<Value> args_values;
+			for(auto& arg : call->args) {
+				if(dynamic_cast<Placeholder*>(arg.get())) args_values.push_back(left);
+				else args_values.push_back(eval(arg.get()));
+			}
 
-    std::string accumulated = "";
-    if (parent_underscore.type == Value::Type::String) {
-        accumulated = parent_underscore.str;
-    } else if (parent_underscore.type != Value::Type::Null) {
-        accumulated = parent_underscore.to_display();
-    }
+			try {
+				Value var = get_var(call->name);
+				if(var.type == Value::Type::Function) {
+					FuncDef* f = var.fn.func;
+					push_scope(); ScopeGuard guard{scopes_};
+					def_var("__fn_boundary__", Value::from_bool(true));
+					for(size_t i = 0; i < f->params.size(); i++) def_var(f->params[i], args_values[i]);
+					try { execute(f->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
+					executed_call = true;
+				}
+			} catch(...) {}
 
-    Value final_val = Value::from_str(accumulated + html_result);
+			if(!executed_call) {
+				auto nat = natives_.find(call->name);
+				auto it  = funcs_.find(call->name);
+				if(nat != natives_.end()) { pipe_result = nat->second(args_values); executed_call = true; }
+				else if(it != funcs_.end()) {
+					FuncDef* func = it->second;
+					push_scope(); ScopeGuard guard{scopes_};
+					def_var("__fn_boundary__", Value::from_bool(true));
+					for(size_t i = 0; i < func->params.size(); i++) def_var(func->params[i], args_values[i]);
+					try { execute(func->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
+					executed_call = true;
+				}
+			}
+		} else {
+			std::vector<Value> args_values;
+			args_values.push_back(left);
+			for(auto& arg : call->args) args_values.push_back(eval(arg.get()));
 
-    if (scopes_.size() > 1) {
-        scopes_[scopes_.size() - 2]["_"] = final_val;
-    } else {
-        set_var("_", final_val);
-    }
+			if(call->name == "filter") {
+				auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
+				if(!lambda) throw std::runtime_error("filter attend un bloc { }");
+				std::vector<Value> result;
+				for(auto& item : left.arr) {
+					push_scope(); ScopeGuard guard{scopes_};
+					def_var("item", item);
+					Value cond = Value::null();
+					try { execute(lambda->body.get()); } catch(ReturnException& ret) { cond = ret.value; }
+					if(cond.truthy()) result.push_back(item);
+				}
+				return Value::from_arr(result);
+			}
 
-    return final_val;
+			if(call->name == "each") {
+				auto* lambda = dynamic_cast<LambdaBlock*>(call->args[0].get());
+				if(!lambda) throw std::runtime_error("each attend un bloc { }");
+				for(auto& item : left.arr) {
+					push_scope(); ScopeGuard guard{scopes_};
+					def_var("item", item);
+					try { execute(lambda->body.get()); } catch(ReturnException&) {}
+				}
+				return left;
+			}
+
+			std::string func_name = call->name;
+			try {
+				Value var = get_var(call->name);
+				if(var.type == Value::Type::Function) {
+					FuncDef* f = var.fn.func;
+					if(args_values.size() != f->params.size()) throw std::runtime_error("Arguments invalides");
+					push_scope(); ScopeGuard guard{scopes_};
+					def_var("__fn_boundary__", Value::from_bool(true));
+					for(size_t i = 0; i < f->params.size(); i++) def_var(f->params[i], args_values[i]);
+					try { execute(f->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
+					executed_call = true;
+				}
+			} catch(...) {}
+
+			if(!executed_call) {
+				auto nat = natives_.find(func_name);
+				auto it  = funcs_.find(func_name);
+				if(nat != natives_.end()) { pipe_result = nat->second(args_values); executed_call = true; }
+				else if(it != funcs_.end()) {
+					FuncDef* func = it->second;
+					if(args_values.size() == func->params.size()) {
+						push_scope(); ScopeGuard guard{scopes_};
+						def_var("__fn_boundary__", Value::from_bool(true));
+						for(size_t i = 0; i < func->params.size(); i++) def_var(func->params[i], args_values[i]);
+						try { execute(func->body.get()); } catch(ReturnException& ret) { pipe_result = ret.value; }
+						executed_call = true;
+					}
+				}
+			}
+		}
+
+		if(executed_call) {
+			bool inside_component = false;
+			if (!scopes_.empty()) {
+				for (int i = (int)scopes_.size() - 1; i >= 0; i--) {
+					if (scopes_[i].count("__component_scope__")) {
+						inside_component = true;
+						break;
+					}
+				}
+			}
+
+			if (inside_component) {
+				scopes_.back()["_"] = pipe_result;
+			} else {
+				if (scopes_.size() > 1) {
+					scopes_[scopes_.size() - 2]["_"] = pipe_result;
+				} else {
+					set_var("_", pipe_result);
+				}
+			}
+			return pipe_result;
+		}
+	}
+
+	return left;
 }

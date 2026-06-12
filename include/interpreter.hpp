@@ -57,12 +57,15 @@ struct ScopeGuard {
 
 class Interpreter {
 public:
+    bool inside_component_ = false;
     void run(ASTNode* node);
     void set_curses_mode(bool enabled);
     bool is_curses_mode() const;
     void register_native(const std::string& name, std::function<Value(std::vector<Value>)> fn);
     void register_core_natives();
     Value get_var(const std::string& name);
+    void set_var(const std::string& name, Value val);
+        void execute(ASTNode* node);
 
     std::unordered_map<std::string, std::function<Value(std::vector<Value>)>> natives_;
 
@@ -78,11 +81,10 @@ private:
 
     void push_scope();
     void pop_scope();
-    void set_var(const std::string& name, Value val);
     void def_var(const std::string& name, Value val);
     Value& get_var_ref(const std::string& name);
 
-    void execute(ASTNode* node);
+
     Value eval(ASTNode* node);
     Value eval_binop(BinOp* n);
     Value eval_pipe(PipeExpr* n);

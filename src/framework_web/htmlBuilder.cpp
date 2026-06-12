@@ -7,7 +7,7 @@ std::string HtmlBuilder::buildPage(const std::string& bodyContent) {
     html += "    <meta charset=\"UTF-8\">\n";
     html += "    <script src=\"https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4\"></script>\n";
     html += "    <script defer src=\"https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js\"></script>\n";
-    html += "</head>\n<body class=\"bg-slate-900 text-slate-50 min-h-screen\">\n";
+    html += "</head>\n<body class=\"min-h-screen\">\n";
 
     html += bodyContent;
 
