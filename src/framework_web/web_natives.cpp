@@ -4,11 +4,30 @@
 #include "../../include/parser.hpp"
 #include "color.hpp"
 #include <vector>
+#include <unordered_map>
 #include <string>
 
 namespace NPL {
 
+    struct PearlColor {
+    std::string rgba_top;
+        std::string rgba_bottom;
+    };
+
 	void register_web_natives(Interpreter* interpreter) {
+
+        std::unordered_map<std::string, PearlColor> pearl_themes = {
+            {"cyan",   {"rgba(0, 242, 254, 0.15)",  "rgba(37, 99, 235, 0.10)"}},
+            {"red",    {"rgba(239, 68, 68, 0.15)",   "rgba(185, 28, 28, 0.08)"}},
+            {"purple", {"rgba(168, 85, 247, 0.15)",  "rgba(76, 29, 149, 0.10)"}},
+            {"green",  {"rgba(16, 185, 129, 0.12)",  "rgba(4, 120, 87, 0.08)"}},
+            {"gold",   {"rgba(212, 163, 115, 0.10)",  "rgba(120, 113, 108, 0.05)"}},
+            {"pink",   {"rgba(244, 114, 182, 0.15)",  "rgba(190, 24, 74, 0.08)"}},
+            {"orange", {"rgba(249, 115, 22, 0.12)",   "rgba(194, 65, 12, 0.08)"}},
+            {"blue",   {"rgba(59, 130, 246, 0.15)",   "rgba(29, 78, 216, 0.10)"}},
+            {"emerald",{"rgba(52, 211, 153, 0.15)",   "rgba(5, 150, 105, 0.08)"}},
+            {"silver", {"rgba(226, 232, 240, 0.10)",  "rgba(71, 85, 105, 0.05)"}}
+        };
 
 		interpreter->register_native("red", [](std::vector<Value> args) -> Value {
 			if (args.empty()) return Value::from_str("");
@@ -256,5 +275,37 @@ namespace NPL {
 
             return Value::from_str(content);
         });
+
+		/*
+		interpreter->register_native("bg_pearl", [](std::vector<Value> args) -> Value {
+            if (args.empty()) return Value::from_str("");
+            std::string content = args[0].to_display();
+
+            std::string pearl_layout =
+                "<div class=\"min-h-screen w-full relative overflow-hidden\" style=\"background: radial-gradient(circle at top right, rgba(0, 242, 254, 0.15) 0%, rgba(6, 8, 12, 1) 70%); background-color: #06080c;\">\n"
+                "  <div class=\"relative z-10\">\n" + content + "\n  </div>\n"
+                "</div>";
+
+            return Value::from_str(pearl_layout);
+        });
+        */
+
+		for (const auto& [name, colors] : pearl_themes) {
+            std::string native_name = "bg_pearl_" + name;
+
+            interpreter->register_native(native_name, [colors](std::vector<Value> args) -> Value {
+                if (args.empty()) return Value::from_str("");
+                std::string content = args[0].to_display();
+
+                std::string pearl_layout =
+                    "<div class=\"min-h-screen w-full relative overflow-hidden\" style=\"background: radial-gradient(circle at top right, " + colors.rgba_top + " 0%, rgba(6, 8, 12, 1) 70%); background-color: #06080c;\">\n"
+                    "  <div class=\"absolute inset-0\" style=\"background: radial-gradient(circle at bottom left, " + colors.rgba_bottom + " 0%, transparent 100%);\"></div>\n"
+                    "  <div class=\"absolute inset-0 bg-black/[0.03] backdrop-blur-[1px]\"></div>\n"
+                    "  <div class=\"relative z-10\">\n" + content + "\n  </div>\n"
+                    "</div>";
+
+                return Value::from_str(pearl_layout);
+            });
+        }
 	}
 }
